@@ -49,6 +49,7 @@ FRAME_MS = int(os.getenv("VOICE_FRAME_MS", "80"))
 IDLE_SESSION_MS = int(os.getenv("VOICE_IDLE_SESSION_MS", "9000"))
 MAX_SESSION_MS = int(os.getenv("VOICE_MAX_SESSION_MS", "30000"))
 ARECORD_DEVICE = os.getenv("VOICE_ARECORD_DEVICE", "")
+AGENT_FIRST_MESSAGE = os.getenv("VOICE_AGENT_FIRST_MESSAGE", "")
 
 FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS // 1000
 FRAME_BYTES = FRAME_SAMPLES * SAMPLE_WIDTH_BYTES
@@ -121,6 +122,17 @@ def resolve_wake_model_path():
     raise RuntimeError(f"Could not find openWakeWord model for {WAKE_MODEL}. Set VOICE_WAKE_MODEL_PATH to an .onnx model.")
 
 
+def conversation_initiation_payload():
+    return {
+        "type": "conversation_initiation_client_data",
+        "conversation_config_override": {
+            "agent": {
+                "first_message": AGENT_FIRST_MESSAGE,
+            },
+        },
+    }
+
+
 class ElevenLabsSession:
     def __init__(self, buffered_frames):
         self.buffered_frames = list(buffered_frames)
@@ -154,7 +166,7 @@ class ElevenLabsSession:
             player = start_aplay()
 
             async with websockets.connect(signed_url, max_size=8 * 1024 * 1024) as websocket:
-                await websocket.send(json.dumps({"type": "conversation_initiation_client_data"}))
+                await websocket.send(json.dumps(conversation_initiation_payload()))
                 post_voice_status("listening", "Listening")
 
                 for frame in self.buffered_frames:
@@ -203,9 +215,13 @@ class ElevenLabsSession:
                 await websocket.send(json.dumps({"type": "pong", "event_id": event.get("ping_event", {}).get("event_id")}))
             elif event_type == "user_transcript":
                 text = event.get("user_transcription_event", {}).get("user_transcript", "")
+                if text:
+                    print(f"User transcript: {text}", flush=True)
                 post_voice_status("thinking", text)
             elif event_type == "agent_response":
                 text = event.get("agent_response_event", {}).get("agent_response", "")
+                if text:
+                    print(f"Agent response: {text}", flush=True)
                 post_voice_status("speaking", text)
             elif event_type == "audio":
                 audio = base64.b64decode(event.get("audio_event", {}).get("audio_base_64", ""))
