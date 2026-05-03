@@ -50,6 +50,7 @@ IDLE_SESSION_MS = int(os.getenv("VOICE_IDLE_SESSION_MS", "9000"))
 MAX_SESSION_MS = int(os.getenv("VOICE_MAX_SESSION_MS", "30000"))
 ARECORD_DEVICE = os.getenv("VOICE_ARECORD_DEVICE", "")
 AGENT_FIRST_MESSAGE = os.getenv("VOICE_AGENT_FIRST_MESSAGE", "")
+VOICE_LOG_PATH = os.getenv("VOICE_LOG_PATH", "/tmp/smartmirror-voice.log")
 
 FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS // 1000
 FRAME_BYTES = FRAME_SAMPLES * SAMPLE_WIDTH_BYTES
@@ -57,6 +58,16 @@ PRE_ROLL_FRAMES = max(1, PRE_ROLL_MS // FRAME_MS)
 
 active_session = None
 shutdown_requested = False
+
+
+def log(message):
+    text = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {message}"
+    print(text, flush=True)
+    try:
+        with open(VOICE_LOG_PATH, "a", encoding="utf-8") as handle:
+            handle.write(text + "\n")
+    except Exception:
+        pass
 
 
 def request_json(method, url, payload=None):
@@ -82,7 +93,7 @@ def post_voice_status(status, text=""):
     try:
         request_json("POST", f"{MIRROR_BASE_URL}/voice-status", {"status": status, "text": text})
     except Exception as error:
-        print(f"voice-status failed: {error}", file=sys.stderr)
+        log(f"voice-status failed: {error}")
 
 
 def get_signed_url():
@@ -187,7 +198,7 @@ class ElevenLabsSession:
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            print(f"voice session failed: {error}", file=sys.stderr)
+            log(f"voice session failed: {error}")
             await self.close("error", str(error))
         finally:
             if player and player.stdin:
@@ -195,6 +206,11 @@ class ElevenLabsSession:
                     player.stdin.close()
                 except BrokenPipeError:
                     pass
+            if player:
+                try:
+                    player.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    player.terminate()
             await self.close()
 
     async def sender(self, websocket):
@@ -216,12 +232,12 @@ class ElevenLabsSession:
             elif event_type == "user_transcript":
                 text = event.get("user_transcription_event", {}).get("user_transcript", "")
                 if text:
-                    print(f"User transcript: {text}", flush=True)
+                    log(f"User transcript: {text}")
                 post_voice_status("thinking", text)
             elif event_type == "agent_response":
                 text = event.get("agent_response_event", {}).get("agent_response", "")
                 if text:
-                    print(f"Agent response: {text}", flush=True)
+                    log(f"Agent response: {text}")
                 post_voice_status("speaking", text)
             elif event_type == "audio":
                 audio = base64.b64decode(event.get("audio_event", {}).get("audio_base_64", ""))
@@ -248,13 +264,13 @@ async def main():
     global active_session, shutdown_requested
 
     wake_model_path = resolve_wake_model_path()
-    print(f"Loading openWakeWord model: {wake_model_path}")
+    log(f"Loading openWakeWord model: {wake_model_path}")
     model = Model(wakeword_model_paths=[wake_model_path])
     wake_label = next(iter(model.models.keys()))
     pre_roll = deque(maxlen=PRE_ROLL_FRAMES)
     recorder = start_arecord()
     post_voice_status("idle", "Wake listener ready")
-    print(f"Listening for {wake_label} at threshold {WAKE_THRESHOLD}.")
+    log(f"Listening for {wake_label} at threshold {WAKE_THRESHOLD}.")
 
     while not shutdown_requested:
       raw = await asyncio.to_thread(recorder.stdout.read, FRAME_BYTES)
@@ -272,7 +288,7 @@ async def main():
       predictions = model.predict(frame)
       score = float(predictions.get(wake_label, 0.0))
       if score >= WAKE_THRESHOLD:
-          print(f"Wake detected: {wake_label} score={score:.3f}")
+          log(f"Wake detected: {wake_label} score={score:.3f}")
           buffered_frames = list(pre_roll)
           active_session = ElevenLabsSession(buffered_frames)
 
