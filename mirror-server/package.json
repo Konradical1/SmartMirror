@@ -9,13 +9,18 @@
     "voice": "./.venv-voice/bin/python scripts/voice-agent-openwakeword.py",
     "chat:openrouter": "node scripts/openrouter-chat.js",
     "test:command": "node scripts/test-command.js",
-    "test:calendar-dates": "node scripts/test-calendar-dates.js"
+    "test:calendar-dates": "node scripts/test-calendar-dates.js",
+    "test:voice": "node scripts/test-local-voice.js",
+    "verify:voice": "node scripts/verify-voice-setup.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "mic": "^2.1.2",
     "ngrok": "^5.0.0-beta.2",
     "node-fetch": "^3.3.2",
+    "speaker": "^0.5.4",
+    "wav-encoder": "^1.3.0",
     "ws": "^8.18.0"
   }
 }
