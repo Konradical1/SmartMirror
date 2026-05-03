@@ -6,7 +6,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleIntent } from './intentRouter.js';
-import { attachWebSocket, broadcastOverlay } from './websocket.js';
+import { attachWebSocket, broadcastOverlay, broadcastVoiceStatus } from './websocket.js';
 import { refreshSpotify, startSpotifyPolling } from './handlers/spotify.js';
 import { refreshCalendar } from './handlers/calendar.js';
 import { refreshTodos } from './handlers/todo.js';
@@ -50,6 +50,69 @@ app.post('/mirror-command', async (request, response) => {
       ok: false,
       speech: failureSpeech,
     });
+  }
+});
+
+app.post('/voice-status', (request, response) => {
+  if (!validateSecret(request, process.env.ELEVENLABS_TOOL_SECRET)) {
+    response.status(401).json({ ok: false });
+    return;
+  }
+
+  const status = typeof request.body?.status === 'string' ? request.body.status.trim().toLowerCase() : '';
+  const text = typeof request.body?.text === 'string' ? request.body.text : '';
+  const allowedStatuses = new Set(['idle', 'wake_detected', 'listening', 'thinking', 'speaking', 'error']);
+
+  if (!allowedStatuses.has(status)) {
+    response.status(400).json({ ok: false, error: 'Invalid voice status.' });
+    return;
+  }
+
+  logger.info(`voice ${status}${text ? ` ${text}` : ''}`);
+  broadcastVoiceStatus(status, text);
+  response.json({ ok: true });
+});
+
+app.get('/elevenlabs-signed-url', async (request, response) => {
+  if (!validateSecret(request, process.env.ELEVENLABS_TOOL_SECRET)) {
+    response.status(401).json({ ok: false });
+    return;
+  }
+
+  const agentId = process.env.ELEVENLABS_AGENT_ID;
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+
+  if (!agentId || !apiKey) {
+    response.status(500).json({
+      ok: false,
+      error: 'Set ELEVENLABS_AGENT_ID and ELEVENLABS_API_KEY before starting voice conversations.',
+    });
+    return;
+  }
+
+  try {
+    const upstream = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
+      {
+        headers: {
+          'xi-api-key': apiKey,
+        },
+      },
+    );
+
+    const data = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || !data.signed_url) {
+      response.status(upstream.status || 502).json({
+        ok: false,
+        error: data.detail || data.error || 'Failed to get ElevenLabs signed URL.',
+      });
+      return;
+    }
+
+    response.json({ ok: true, signed_url: data.signed_url });
+  } catch (error) {
+    logger.error(`ElevenLabs signed URL failed: ${error.message}`);
+    response.status(502).json({ ok: false, error: 'Failed to reach ElevenLabs.' });
   }
 });
 

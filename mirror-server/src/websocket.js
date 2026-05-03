@@ -76,3 +76,13 @@ export function broadcastOverlay(speech) {
     },
   });
 }
+
+export function broadcastVoiceStatus(status, text = '') {
+  broadcast({
+    type: 'VOICE_STATUS',
+    payload: {
+      status,
+      text,
+    },
+  });
+}

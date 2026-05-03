@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
+    "voice": "./.venv-voice/bin/python scripts/voice-agent-openwakeword.py",
+    "chat:openrouter": "node scripts/openrouter-chat.js",
     "test:command": "node scripts/test-command.js",
     "test:calendar-dates": "node scripts/test-calendar-dates.js"
   },

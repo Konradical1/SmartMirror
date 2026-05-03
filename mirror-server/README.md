@@ -40,6 +40,8 @@ Required server env:
 PORT=3001
 WS_PORT=3001
 ELEVENLABS_TOOL_SECRET=super_secret_key
+ELEVENLABS_API_KEY=
+ELEVENLABS_AGENT_ID=
 NGROK_AUTHTOKEN=
 ```
 
@@ -158,6 +160,82 @@ Use `DISPLAY_MESSAGE` whenever ElevenLabs is about to speak a response that does
   "speech": "Yes, sir. Riveting stuff."
 }
 ```
+
+## Voice Status
+
+The Raspberry Pi wake-word listener can update the mirror UI without running an intent:
+
+```text
+POST http://<mirror-host>:3001/voice-status
+X-Mirror-Secret: super_secret_key
+```
+
+```json
+{
+  "status": "wake_detected",
+  "text": "Wake word detected"
+}
+```
+
+Supported statuses:
+
+```text
+idle
+wake_detected
+listening
+thinking
+speaking
+error
+```
+
+## Raspberry Pi Wake Word
+
+The Pi voice daemon uses openWakeWord locally, so it does not require Picovoice or a cloud wake-word key. The default model is `hey_jarvis`. For best results with `jarvis`, `hey jarvis`, and `yo jarvis`, train or download a custom openWakeWord model and set `VOICE_WAKE_MODEL` to that model path.
+
+Required env:
+
+```bash
+ELEVENLABS_API_KEY=
+ELEVENLABS_AGENT_ID=
+MIRROR_BASE_URL=http://127.0.0.1:3001
+VOICE_WAKE_MODEL=hey_jarvis
+VOICE_WAKE_MODEL_PATH=
+VOICE_WAKE_THRESHOLD=0.45
+VOICE_ARECORD_DEVICE=
+VOICE_FRAME_MS=80
+VOICE_PRE_ROLL_MS=1200
+VOICE_IDLE_SESSION_MS=9000
+VOICE_MAX_SESSION_MS=30000
+```
+
+Install the Python voice dependencies on the Pi:
+
+```bash
+cd mirror-server
+python3 -m venv .venv-voice
+.venv-voice/bin/pip install -r requirements-voice.txt
+cd ..
+```
+
+Run it after the mirror server is running:
+
+```bash
+npm --prefix mirror-server run voice
+```
+
+Audio path:
+
+```text
+USB mic -> arecord -> openWakeWord -> 1.2s pre-roll buffer -> ElevenLabs signed Agent WebSocket -> PCM audio playback with aplay
+```
+
+Check microphone detection on the Pi:
+
+```bash
+arecord -l
+```
+
+If multiple capture devices are listed, set `VOICE_ARECORD_DEVICE` to the ALSA device name, for example `plughw:1,0`. Leave it empty to use the system default.
 
 Todo examples:
 
