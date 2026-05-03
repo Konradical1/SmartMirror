@@ -13,9 +13,10 @@ export default function SpotifyBlock({ spotify, focused }) {
   const [tick, setTick] = useState(Date.now());
 
   useEffect(() => {
-    const interval = window.setInterval(() => setTick(Date.now()), 1000);
+    if (!spotify.isPlaying) return undefined;
+    const interval = window.setInterval(() => setTick(Date.now()), 5000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [spotify.isPlaying]);
 
   const liveProgress = useMemo(() => {
     const durationMs = spotify.durationMs || 0;
