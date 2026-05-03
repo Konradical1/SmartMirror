@@ -13,7 +13,8 @@ export function useMirrorSocket() {
     let closed = false;
 
     const connect = () => {
-      socket = new WebSocket('ws://localhost:3001');
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      socket = new WebSocket(`${protocol}//${window.location.host}`);
 
       socket.addEventListener('open', () => setListening(false));
       socket.addEventListener('close', () => {

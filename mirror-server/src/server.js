@@ -21,6 +21,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env'), override: false });
 const port = Number(process.env.PORT || process.env.WS_PORT || 3001);
 const app = express();
 const server = http.createServer(app);
+const distPath = path.resolve(__dirname, '../../dist');
 
 app.use(express.json({ limit: '256kb' }));
 
@@ -49,6 +50,22 @@ app.post('/mirror-command', async (request, response) => {
     });
   }
 });
+
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath, {
+    index: false,
+    maxAge: '1h',
+  }));
+
+  app.get('*', (request, response, next) => {
+    if (request.path.startsWith('/mirror-command')) {
+      next();
+      return;
+    }
+
+    response.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 attachWebSocket(server);
 
