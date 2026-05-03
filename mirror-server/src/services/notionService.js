@@ -37,6 +37,7 @@ export async function addTodo({ title, tag = 'Personal', date = null }) {
 
   const schema = await getDatabaseSchema(databaseId);
   const titleKey = resolveTitleProperty(schema);
+  const dueDate = normalizeDateInput(date);
 
   await notionFetch('/pages', {
     method: 'POST',
@@ -46,7 +47,7 @@ export async function addTodo({ title, tag = 'Personal', date = null }) {
         [titleKey]: { title: [{ text: { content: title } }] },
         ...initialDoneProperty(schema[doneProperty]?.type),
         ...tagProperty(schema[tagPropertyName]?.type, tag),
-        ...(date ? { [datePropertyName]: { date: { start: date } } } : {}),
+        ...dateProperty(schema[datePropertyName]?.type, dueDate),
       },
     }),
   });
@@ -161,6 +162,11 @@ function tagProperty(tagType, tag) {
   return {};
 }
 
+function dateProperty(dateType, date) {
+  if (dateType !== 'date' || !date) return {};
+  return { [datePropertyName]: { date: { start: date } } };
+}
+
 function titleMatches(left, right) {
   const a = left.toLowerCase();
   const b = right.toLowerCase();
@@ -170,3 +176,55 @@ function titleMatches(left, right) {
 function formatShortDate(value) {
   return new Date(`${value}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
+
+function normalizeDateInput(input) {
+  if (!input) return null;
+
+  const value = String(input)
+    .trim()
+    .toLowerCase()
+    .replace(/^(on|this)\s+/, '');
+  const today = startOfDay(new Date());
+
+  if (!value || value === 'someday' || value === 'soon') return null;
+  if (value === 'today') return formatDateKey(today);
+  if (value === 'tomorrow') return formatDateKey(addDays(today, 1));
+
+  const isoDateMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDateMatch) return value;
+
+  const weekdayMatch = value.match(/^(next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/);
+  if (weekdayMatch) {
+    const target = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(weekdayMatch[2]);
+    let offset = (target - today.getDay() + 7) % 7;
+    if (offset === 0 || weekdayMatch[1]) offset += 7;
+    return formatDateKey(addDays(today, offset));
+  }
+
+  const parsed = new Date(input);
+  if (Number.isNaN(parsed.getTime())) throw new Error(`Could not understand todo due date: ${input}`);
+  return formatDateKey(parsed);
+}
+
+function addDays(date, days) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function startOfDay(date) {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function formatDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export const __notionTest = {
+  normalizeDateInput,
+};

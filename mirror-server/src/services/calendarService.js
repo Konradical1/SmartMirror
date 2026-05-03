@@ -8,6 +8,10 @@ export async function getCalendarEvents() {
   return groupEvents(events);
 }
 
+export const __calendarTest = {
+  groupEvents,
+};
+
 export async function createCalendarEvent(params = {}) {
   const token = await getGoogleAccessToken();
   const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
@@ -217,7 +221,7 @@ function groupEvents(events) {
     const date = new Date();
     date.setDate(date.getDate() + index);
     return {
-      key: date.toISOString().slice(0, 10),
+      key: formatDateKey(date),
       day: date.toLocaleDateString([], { weekday: 'long' }),
       date: date.toLocaleDateString([], { month: 'short', day: 'numeric' }),
       events: [],
@@ -228,7 +232,7 @@ function groupEvents(events) {
     const startText = event.start?.dateTime || event.start?.date;
     if (!startText) continue;
     const start = event.start?.date ? parseDateInput(event.start.date) : new Date(startText);
-    const key = event.start?.date || start.toISOString().slice(0, 10);
+    const key = event.start?.date || formatDateKey(start);
     const day = days.find((candidate) => candidate.key === key);
     if (!day) continue;
 

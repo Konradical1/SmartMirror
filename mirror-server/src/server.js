@@ -102,6 +102,10 @@ async function startNgrok(addr) {
       logger.warn(`ngrok exited with code ${code}`);
     });
 
+    child.on('error', (error) => {
+      logger.error(`ngrok process failed: ${error.message}`);
+    });
+
     const url = await waitForNgrokUrl();
     logger.info(`Ngrok tunnel: ${url}`);
     logger.info(`ElevenLabs tool URL: ${url}/mirror-command`);
@@ -113,22 +117,34 @@ async function startNgrok(addr) {
 function resolveNgrokBinary() {
   const candidates = [
     process.env.NGROK_BIN,
+    process.platform === 'win32' && path.resolve(__dirname, '../node_modules/ngrok/bin/ngrok.exe'),
     '/opt/homebrew/bin/ngrok',
     '/usr/local/bin/ngrok',
-    spawnSync('which', ['ngrok'], { encoding: 'utf8' }).stdout.trim(),
+    resolvePathCommand('ngrok'),
+    path.resolve(__dirname, '../node_modules/ngrok/bin/ngrok'),
   ].filter(Boolean);
 
   for (const candidate of candidates) {
-    if (candidate.includes('node_modules')) continue;
+    if (process.platform === 'win32' && candidate.endsWith('.cmd')) continue;
     if (fs.existsSync(candidate)) return candidate;
   }
 
-  return path.resolve(__dirname, '../node_modules/ngrok/bin/ngrok');
+  throw new Error('Could not find an ngrok binary. Re-run npm --prefix mirror-server install or set NGROK_BIN.');
+}
+
+function resolvePathCommand(command) {
+  const lookup = process.platform === 'win32' ? 'where' : 'which';
+  const result = spawnSync(lookup, [command], { encoding: 'utf8' });
+  const output = result.stdout || result.stderr || '';
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
 }
 
 function ngrokVersion(binary) {
   const result = spawnSync(binary, ['version'], { encoding: 'utf8' });
-  return (result.stdout || result.stderr || 'unknown').trim();
+  return (result.stdout || result.stderr || result.error?.message || 'unknown').trim();
 }
 
 async function waitForNgrokUrl() {

@@ -40,10 +40,19 @@ export async function handleIntent(intent, params = {}, speech = '') {
     case 'SPOTIFY_PLAY':
       return handleSpotifyControl(intent, params, speech);
     case 'SHOW_TODO':
+    case 'SHOW_TODOS':
+    case 'SHOW_TASKS':
       return handleTodo(params, speech);
     case 'ADD_TODO':
+    case 'ADD_TASK':
+    case 'CREATE_TODO':
+    case 'CREATE_TASK':
+    case 'ADD_TODO_LIST':
       return handleAddTodo(params, speech);
     case 'CHECK_TODO':
+    case 'CHECK_TASK':
+    case 'COMPLETE_TODO':
+    case 'COMPLETE_TASK':
       return handleCheckTodo(params, speech);
     case 'SHOW_EMAIL':
       return handleEmail(params, speech);

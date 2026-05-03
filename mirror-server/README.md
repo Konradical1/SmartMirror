@@ -86,6 +86,7 @@ npm --prefix mirror-server run dev
 
 The server starts:
 
+- React mirror UI
 - Express HTTP server
 - WebSocket server on the same port
 - API polling for weather, Spotify, Calendar, and Notion
@@ -252,13 +253,7 @@ npm run auth:google
 
 ## Testing
 
-Start the React UI:
-
-```bash
-npm run dev
-```
-
-Start mirror OS:
+Start the React UI and mirror OS:
 
 ```bash
 npm run integrations

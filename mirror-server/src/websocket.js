@@ -1,5 +1,5 @@
 import { WebSocketServer } from 'ws';
-import { updateUi } from './state.js';
+import { state, updateUi } from './state.js';
 import { logger } from './utils/logger.js';
 
 const clients = new Set();
@@ -10,6 +10,7 @@ export function attachWebSocket(server) {
   wss.on('connection', (socket) => {
     clients.add(socket);
     logger.info(`UI connected (${clients.size})`);
+    sendContextSnapshot(socket);
 
     socket.on('message', (raw) => {
       try {
@@ -33,6 +34,19 @@ export function broadcast(message) {
   const payload = JSON.stringify(message);
   for (const client of clients) {
     if (client.readyState === client.OPEN) client.send(payload);
+  }
+}
+
+function sendContextSnapshot(socket) {
+  const payload = Object.fromEntries(
+    Object.entries(state.context).filter(([, value]) => value !== null && value !== undefined),
+  );
+
+  if (Object.keys(payload).length && socket.readyState === socket.OPEN) {
+    socket.send(JSON.stringify({
+      type: 'DATA_UPDATE',
+      payload,
+    }));
   }
 }
 

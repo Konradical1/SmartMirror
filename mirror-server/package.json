@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "test:command": "node scripts/test-command.js"
+    "test:command": "node scripts/test-command.js",
+    "test:calendar-dates": "node scripts/test-calendar-dates.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
