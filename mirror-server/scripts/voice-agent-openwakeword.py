@@ -45,6 +45,7 @@ WAKE_MODEL = os.getenv("VOICE_WAKE_MODEL", "hey_jarvis")
 WAKE_MODEL_PATH = os.getenv("VOICE_WAKE_MODEL_PATH", "")
 WAKE_THRESHOLD = float(os.getenv("VOICE_WAKE_THRESHOLD", "0.45"))
 PRE_ROLL_MS = int(os.getenv("VOICE_PRE_ROLL_MS", "1200"))
+WAKE_AUDIO_LEAD_MS = int(os.getenv("VOICE_WAKE_AUDIO_LEAD_MS", "160"))
 FRAME_MS = int(os.getenv("VOICE_FRAME_MS", "80"))
 IDLE_SESSION_MS = int(os.getenv("VOICE_IDLE_SESSION_MS", "9000"))
 MAX_SESSION_MS = int(os.getenv("VOICE_MAX_SESSION_MS", "30000"))
@@ -55,6 +56,7 @@ SUPPRESS_FIRST_AGENT_TURN = os.getenv("VOICE_SUPPRESS_FIRST_AGENT_TURN", "true")
 FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS // 1000
 FRAME_BYTES = FRAME_SAMPLES * SAMPLE_WIDTH_BYTES
 PRE_ROLL_FRAMES = max(1, PRE_ROLL_MS // FRAME_MS)
+WAKE_AUDIO_LEAD_FRAMES = max(0, WAKE_AUDIO_LEAD_MS // FRAME_MS)
 
 active_session = None
 shutdown_requested = False
@@ -308,7 +310,8 @@ async def main():
       score = float(predictions.get(wake_label, 0.0))
       if score >= WAKE_THRESHOLD:
           log(f"Wake detected: {wake_label} score={score:.3f}")
-          buffered_frames = list(pre_roll)
+          buffered_frames = list(pre_roll)[-WAKE_AUDIO_LEAD_FRAMES:] if WAKE_AUDIO_LEAD_FRAMES else []
+          log(f"Starting voice session with {len(buffered_frames)} lead frame(s); wake phrase audio is not forwarded")
           active_session = ElevenLabsSession(buffered_frames)
 
     recorder.terminate()
