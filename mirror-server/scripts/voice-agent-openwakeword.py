@@ -49,8 +49,8 @@ FRAME_MS = int(os.getenv("VOICE_FRAME_MS", "80"))
 IDLE_SESSION_MS = int(os.getenv("VOICE_IDLE_SESSION_MS", "9000"))
 MAX_SESSION_MS = int(os.getenv("VOICE_MAX_SESSION_MS", "30000"))
 ARECORD_DEVICE = os.getenv("VOICE_ARECORD_DEVICE", "")
-AGENT_FIRST_MESSAGE = os.getenv("VOICE_AGENT_FIRST_MESSAGE", "")
 VOICE_LOG_PATH = os.getenv("VOICE_LOG_PATH", "/tmp/smartmirror-voice.log")
+SUPPRESS_FIRST_AGENT_TURN = os.getenv("VOICE_SUPPRESS_FIRST_AGENT_TURN", "true").lower() != "false"
 
 FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS // 1000
 FRAME_BYTES = FRAME_SAMPLES * SAMPLE_WIDTH_BYTES
@@ -134,13 +134,18 @@ def resolve_wake_model_path():
 
 
 def conversation_initiation_payload():
-    return {
-        "type": "conversation_initiation_client_data",
-        "conversation_config_override": {
-            "agent": {
-                "first_message": AGENT_FIRST_MESSAGE,
-            },
-        },
+    return {"type": "conversation_initiation_client_data"}
+
+
+def is_first_prompt(text):
+    normalized = " ".join(text.lower().replace("?", "").split())
+    return normalized in {
+        "what do you want",
+        "what would you like",
+        "how can i help",
+        "how can i help you",
+        "how may i help",
+        "how may i help you",
     }
 
 
@@ -151,6 +156,8 @@ class ElevenLabsSession:
         self.started_at = time.monotonic()
         self.last_activity = self.started_at
         self.closed = False
+        self.suppressing_first_prompt = SUPPRESS_FIRST_AGENT_TURN
+        self.suppressed_audio_event_ids = set()
         self.task = asyncio.create_task(self.run())
 
     def push_audio(self, frame):
@@ -238,8 +245,20 @@ class ElevenLabsSession:
                 text = event.get("agent_response_event", {}).get("agent_response", "")
                 if text:
                     log(f"Agent response: {text}")
+                if self.suppressing_first_prompt and is_first_prompt(text):
+                    self.suppressing_first_prompt = False
+                    log("Suppressed agent first prompt")
+                    continue
+                self.suppressing_first_prompt = False
                 post_voice_status("speaking", text)
             elif event_type == "audio":
+                event_id = event.get("audio_event", {}).get("event_id")
+                if self.suppressing_first_prompt:
+                    if event_id is not None:
+                        self.suppressed_audio_event_ids.add(event_id)
+                    continue
+                if event_id in self.suppressed_audio_event_ids:
+                    continue
                 audio = base64.b64decode(event.get("audio_event", {}).get("audio_base_64", ""))
                 if audio and player.stdin:
                     player.stdin.write(audio)
