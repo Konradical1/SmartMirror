@@ -236,12 +236,18 @@ function groupEvents(events) {
     const day = days.find((candidate) => candidate.key === key);
     if (!day) continue;
 
+    const isAllDay = Boolean(event.start?.date);
+    const endText = event.end?.dateTime || event.end?.date;
+    const end = endText && !isAllDay ? new Date(endText) : null;
+    const durationMinutes = end ? Math.round((end - start) / 60000) : null;
+
     day.events.push({
       id: event.id,
-      time: event.start?.date ? 'All day' : start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+      time: isAllDay ? 'All day' : formatEventTime(start),
       title: event.summary || 'Untitled',
       color: event.colorId ? '#00E5FF' : '#68E083',
-      duration: 1,
+      allDay: isAllDay,
+      durationMinutes,
     });
   }
 
@@ -254,7 +260,7 @@ function normalizeGoogleEvent(event) {
   return {
     id: event.id,
     title: event.summary || 'Untitled',
-    time: event.start?.date ? 'All day' : start?.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+    time: event.start?.date ? 'All day' : start ? formatEventTime(start) : undefined,
     date: start?.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }),
   };
 }
@@ -305,4 +311,8 @@ function formatDateKey(date) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function formatEventTime(date) {
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }

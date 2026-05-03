@@ -22,6 +22,8 @@ const port = Number(process.env.PORT || process.env.WS_PORT || 3001);
 const app = express();
 const server = http.createServer(app);
 const distPath = path.resolve(__dirname, '../../dist');
+let ngrokProcess = null;
+let ngrokRetryTimer = null;
 
 app.use(express.json({ limit: '256kb' }));
 
@@ -87,23 +89,48 @@ function warmContext() {
   setInterval(() => refreshTodos().catch((error) => logger.error(error.message)), 60 * 1000);
 }
 
-async function startNgrok(addr) {
+async function startNgrok(addr, attempt = 0) {
+  const MAX_ATTEMPTS = 10;
+  const RETRY_DELAY = 20000;
+
   if (!process.env.NGROK_AUTHTOKEN) {
     logger.info('Ngrok disabled. Set NGROK_AUTHTOKEN when you are ready to expose /mirror-command to ElevenLabs.');
     return;
   }
 
+  function retry(reason) {
+    if (ngrokRetryTimer) return;
+    if (attempt < MAX_ATTEMPTS) {
+      logger.warn(`${reason} ? retrying in ${RETRY_DELAY / 1000}s (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
+      ngrokRetryTimer = setTimeout(() => {
+        ngrokRetryTimer = null;
+        startNgrok(addr, attempt + 1);
+      }, RETRY_DELAY);
+    } else {
+      logger.error('Ngrok max retries reached. ElevenLabs integration unavailable until next restart.');
+    }
+  }
+
+  if (ngrokProcess && ngrokProcess.exitCode === null) {
+    logger.warn('Ngrok start skipped because a tunnel process is already running.');
+    return;
+  }
+
   try {
     const ngrokPath = resolveNgrokBinary();
-    logger.info(`Using ngrok binary: ${ngrokPath}`);
-    logger.info(`Using ngrok version: ${ngrokVersion(ngrokPath)}`);
+    if (attempt === 0) {
+      logger.info(`Using ngrok binary: ${ngrokPath}`);
+      logger.info(`Using ngrok version: ${ngrokVersion(ngrokPath)}`);
+    }
+
+    let tunnelUp = false;
+
     const child = spawn(
       ngrokPath,
       ['http', String(addr), '--authtoken', process.env.NGROK_AUTHTOKEN, '--log', 'stdout', '--log-format', 'json'],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
+      { stdio: ['ignore', 'pipe', 'pipe'] },
     );
+    ngrokProcess = child;
 
     child.stdout.on('data', (data) => {
       const text = data.toString().trim();
@@ -116,7 +143,12 @@ async function startNgrok(addr) {
     });
 
     child.on('exit', (code) => {
-      logger.warn(`ngrok exited with code ${code}`);
+      if (ngrokProcess === child) ngrokProcess = null;
+      if (tunnelUp) {
+        retry(`ngrok exited with code ${code}`);
+      } else {
+        retry(`ngrok exited before tunnel was ready with code ${code}`);
+      }
     });
 
     child.on('error', (error) => {
@@ -124,10 +156,12 @@ async function startNgrok(addr) {
     });
 
     const url = await waitForNgrokUrl();
+    tunnelUp = true;
     logger.info(`Ngrok tunnel: ${url}`);
     logger.info(`ElevenLabs tool URL: ${url}/mirror-command`);
   } catch (error) {
     logger.error(`Ngrok failed: ${error.message}`);
+    retry(error.message);
   }
 }
 
