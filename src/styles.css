@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #ffffff;
+  background: #000000;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #000000;
+}
+
+body {
+  font-family: Inter, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+.mirror-stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100svh;
+  overflow: hidden;
+  background: #000000;
+  color: #ffffff;
+}
+
+.mirror-canvas {
+  position: relative;
+  z-index: 1;
+  width: min(100vw, calc(100vh * 9 / 16));
+  height: min(100vh, calc(100vw * 16 / 9));
+  margin: auto;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+@media (max-aspect-ratio: 9 / 16) {
+  .mirror-canvas {
+    width: 100vw;
+    height: 100vh;
+  }
+}
+
+.hairline {
+  border: 1px solid rgba(255, 255, 255, 0.11);
+}
+
+.soft-line {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+}
+
+.text-primary {
+  color: rgba(255, 255, 255, 1);
+}
+
+.text-secondary {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.text-tertiary {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.glow-teal {
+  box-shadow: 0 0 62px rgba(0, 229, 255, 0.12);
+}
+
+.glow-white {
+  box-shadow: 0 0 62px rgba(255, 255, 255, 0.08);
+}
+
+.focus-shell {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(76%, 680px);
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+}
+
+button {
+  font: inherit;
+}

@@ -1,0 +1,283 @@
+# Smart Mirror Integration Server
+
+This is the Smart Mirror Integration Server, or "mirror OS". It sits between ElevenLabs and the React mirror UI.
+
+```text
+ElevenLabs
+  -> POST /mirror-command
+  -> mirror-server intent execution
+  -> Spotify / Calendar / Notion / Weather
+  -> WebSocket ACTION + DATA_UPDATE
+  -> React UI
+```
+
+The React UI stays display-only. It connects to:
+
+```text
+ws://localhost:3001
+```
+
+## Setup
+
+From the repo root:
+
+```bash
+npm install
+npm --prefix mirror-server install
+```
+
+This server loads your existing root `.env` first:
+
+```text
+../.env
+```
+
+Then it loads `mirror-server/.env` for server-only defaults.
+
+Required server env:
+
+```bash
+PORT=3001
+WS_PORT=3001
+ELEVENLABS_TOOL_SECRET=super_secret_key
+NGROK_AUTHTOKEN=
+```
+
+It also supports your existing integration env:
+
+```bash
+SPOTIFY_CLIENT_ID=
+SPOTIFY_CLIENT_SECRET=
+SPOTIFY_REFRESH_TOKEN=
+
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REFRESH_TOKEN=
+GOOGLE_CALENDAR_ID=primary
+CALENDAR_TIMEZONE=America/New_York
+
+NOTION_API_KEY=
+NOTION_DATABASE_ID=
+NOTION_TITLE_PROPERTY=
+NOTION_DONE_PROPERTY=Status
+NOTION_DONE_STATUS=Done
+NOTION_TAG_PROPERTY=Tag
+NOTION_DATE_PROPERTY=Due date
+
+WEATHER_LOCATION=Anderson Township, OH
+WEATHER_LATITUDE=39.0714
+WEATHER_LONGITUDE=-84.3505
+WEATHER_TIMEZONE=America/New_York
+```
+
+## Run Server
+
+From repo root:
+
+```bash
+npm run integrations
+```
+
+Or directly:
+
+```bash
+npm --prefix mirror-server run dev
+```
+
+The server starts:
+
+- Express HTTP server
+- WebSocket server on the same port
+- API polling for weather, Spotify, Calendar, and Notion
+- Optional ngrok tunnel if `NGROK_AUTHTOKEN` is set
+
+## ElevenLabs Config
+
+Create an ElevenLabs server tool:
+
+```text
+POST https://<ngrok-url>/mirror-command
+```
+
+Header:
+
+```text
+X-Mirror-Secret: super_secret_key
+```
+
+Request body:
+
+```json
+{
+  "intent": "SHOW_WEATHER",
+  "params": {},
+  "speech": ""
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "speech": "54 degrees and partly cloudy in Anderson Township, sir. Feels like 45.",
+  "data": {}
+}
+```
+
+Important: the server is authoritative for speech. ElevenLabs may send `speech`, but connected intents generate their final response from live data. The returned `speech` is also sent to the UI overlay, so ElevenLabs should speak the returned `speech` exactly.
+
+## Supported Intents
+
+```text
+SHOW_WEATHER
+SHOW_CALENDAR
+ADD_CALENDAR_EVENT
+EDIT_CALENDAR_EVENT
+DELETE_CALENDAR_EVENT
+SHOW_SPOTIFY
+SPOTIFY_NEXT
+SPOTIFY_PREVIOUS
+SPOTIFY_PAUSE
+SPOTIFY_PLAY
+SHOW_TODO
+ADD_TODO
+CHECK_TODO
+SHOW_EMAIL
+DISPLAY_MESSAGE
+IDLE
+```
+
+Use `DISPLAY_MESSAGE` whenever ElevenLabs is about to speak a response that does not otherwise open a panel or run an action. It mirrors the exact spoken text to the UI bottom overlay without changing the current scene.
+
+```json
+{
+  "intent": "DISPLAY_MESSAGE",
+  "params": {},
+  "speech": "Yes, sir. Riveting stuff."
+}
+```
+
+Todo examples:
+
+```json
+{
+  "intent": "ADD_TODO",
+  "params": {
+    "title": "finish math homework",
+    "tag": "School",
+    "date": "2026-05-08"
+  },
+  "speech": ""
+}
+```
+
+```json
+{
+  "intent": "CHECK_TODO",
+  "params": {
+    "title": "finish math homework"
+  },
+  "speech": ""
+}
+```
+
+Calendar search example:
+
+```json
+{
+  "intent": "SHOW_CALENDAR",
+  "params": {
+    "query": "haircut"
+  },
+  "speech": ""
+}
+```
+
+Calendar write examples:
+
+```json
+{
+  "intent": "ADD_CALENDAR_EVENT",
+  "params": {
+    "title": "haircut",
+    "date": "tomorrow",
+    "time": "2 PM",
+    "durationMinutes": 60
+  },
+  "speech": ""
+}
+```
+
+All-day event example:
+
+```json
+{
+  "intent": "ADD_CALENDAR_EVENT",
+  "params": {
+    "title": "AP 2D submission deadline",
+    "date": "Thursday"
+  },
+  "speech": ""
+}
+```
+
+```json
+{
+  "intent": "EDIT_CALENDAR_EVENT",
+  "params": {
+    "query": "haircut",
+    "date": "next friday",
+    "time": "3 PM"
+  },
+  "speech": ""
+}
+```
+
+```json
+{
+  "intent": "DELETE_CALENDAR_EVENT",
+  "params": {
+    "query": "haircut"
+  },
+  "speech": ""
+}
+```
+
+Calendar writes require the Google Calendar events scope. If your `GOOGLE_REFRESH_TOKEN` was created before this feature, run this again and replace the token in `.env`:
+
+```bash
+npm run auth:google
+```
+
+## Testing
+
+Start the React UI:
+
+```bash
+npm run dev
+```
+
+Start mirror OS:
+
+```bash
+npm run integrations
+```
+
+Send a test command:
+
+```bash
+npm --prefix mirror-server run test:command
+```
+
+Or test another intent:
+
+```bash
+npm --prefix mirror-server run test:command -- SHOW_CALENDAR "Testing calendar."
+```
+
+Expected result:
+
+- UI receives WebSocket messages
+- Correct panel opens
+- HTTP response returns `{ "ok": true, "speech": "..." }`

@@ -1,0 +1,50 @@
+import fetch from 'node-fetch';
+
+const latitude = process.env.WEATHER_LATITUDE || '39.0714';
+const longitude = process.env.WEATHER_LONGITUDE || '-84.3505';
+const timezone = process.env.WEATHER_TIMEZONE || 'America/New_York';
+const location = process.env.WEATHER_LOCATION || 'Anderson Township, OH';
+
+export async function getWeather() {
+  const params = new URLSearchParams({
+    latitude,
+    longitude,
+    current: 'temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min',
+    temperature_unit: 'fahrenheit',
+    wind_speed_unit: 'mph',
+    timezone,
+    forecast_days: '3',
+  });
+
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+  if (!response.ok) throw new Error(`Weather failed: ${response.status} ${await response.text()}`);
+
+  const data = await response.json();
+
+  return {
+    location,
+    temperature: Math.round(data.current?.temperature_2m ?? 0),
+    feelsLike: Math.round(data.current?.apparent_temperature ?? data.current?.temperature_2m ?? 0),
+    condition: weatherLabel(data.current?.weather_code),
+    wind: `${Math.round(data.current?.wind_speed_10m ?? 0)} mph`,
+    humidity: `${Math.round(data.current?.relative_humidity_2m ?? 0)}%`,
+    forecast: data.daily.time.map((date, index) => ({
+      day: index === 0 ? 'Today' : new Date(`${date}T12:00:00`).toLocaleDateString([], { weekday: 'long' }),
+      high: Math.round(data.daily.temperature_2m_max[index]),
+      low: Math.round(data.daily.temperature_2m_min[index]),
+      condition: [0, 1].includes(data.daily.weather_code[index]) ? 'clear' : 'partly',
+    })),
+    hourly: [],
+  };
+}
+
+function weatherLabel(code) {
+  if ([0, 1].includes(code)) return 'Clear';
+  if ([2, 3].includes(code)) return 'Partly cloudy';
+  if ([45, 48].includes(code)) return 'Fog';
+  if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return 'Rain';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'Snow';
+  if ([95, 96, 99].includes(code)) return 'Storm';
+  return 'Partly cloudy';
+}
