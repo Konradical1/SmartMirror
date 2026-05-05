@@ -150,7 +150,7 @@ await Promise.all([
 // Check Node modules
 console.log('\n📦 Checking Node Modules...');
 
-const modules = ['mic', 'speaker', 'wav-encoder', 'dotenv'];
+const modules = ['mic', 'wav-encoder', 'dotenv'];
 for (const mod of modules) {
   try {
     await import(mod);
