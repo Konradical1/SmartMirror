@@ -4,7 +4,6 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import Mic from 'mic';
-import Speaker from 'speaker';
 import WavEncoder from 'wav-encoder';
 import fetch from 'node-fetch';
 import { logger } from '../utils/logger.js';
@@ -1009,11 +1008,7 @@ function playAudioStream(audioStream, { label = 'TTS', signal, missingBodyMessag
         'pipe:1',
       ]);
 
-      const speaker = new Speaker({
-        channels: 1,
-        bitDepth: 16,
-        sampleRate: 16000,
-      });
+      const player = startPcmPlayer();
 
       if (!audioStream) {
         reject(new Error(missingBodyMessage));
@@ -1044,7 +1039,7 @@ function playAudioStream(audioStream, { label = 'TTS', signal, missingBodyMessag
           // Already closed.
         }
         try {
-          ffmpeg.stdout.unpipe?.(speaker);
+          ffmpeg.stdout.unpipe?.(player.stdin);
         } catch {
           // Already closed.
         }
@@ -1059,9 +1054,14 @@ function playAudioStream(audioStream, { label = 'TTS', signal, missingBodyMessag
           // Already stopped.
         }
         try {
-          speaker.end?.();
+          player.stdin?.end?.();
         } catch {
           // Already closed.
+        }
+        try {
+          if (!player.killed) player.kill('SIGTERM');
+        } catch {
+          // Already stopped.
         }
         try {
           if (!ffmpeg.killed) ffmpeg.kill('SIGTERM');
@@ -1091,7 +1091,7 @@ function playAudioStream(audioStream, { label = 'TTS', signal, missingBodyMessag
       signal?.addEventListener?.('abort', abortPlayback, { once: true });
 
       audioStream.pipe(ffmpeg.stdin);
-      ffmpeg.stdout.pipe(speaker);
+      ffmpeg.stdout.pipe(player.stdin);
 
       ffmpeg.stdin.on('error', (err) => {
         if (settled || signal?.aborted || err.code === 'EPIPE') return;
@@ -1111,18 +1111,50 @@ function playAudioStream(audioStream, { label = 'TTS', signal, missingBodyMessag
         settle(err);
       });
 
-      speaker.on('error', (err) => {
-        if (settled || signal?.aborted) return;
-        logger.error('Speaker error:', err.message);
+      player.stdin.on('error', (err) => {
+        if (settled || signal?.aborted || err.code === 'EPIPE') return;
+        logger.error(`${label} player stdin error:`, err.message);
         settle(err);
       });
 
-      speaker.on('finish', () => settle(null, { interrupted: false }));
-      speaker.on('close', () => settle(null, { interrupted: Boolean(signal?.aborted) }));
+      player.on('error', (err) => {
+        if (settled || signal?.aborted) return;
+        logger.error(`${label} player error:`, err.message);
+        settle(err);
+      });
+
+      player.on('close', (code) => {
+        if (settled) return;
+        if (!signal?.aborted && code && code !== 0) {
+          settle(new Error(`${label} player exited with code ${code}`));
+          return;
+        }
+        settle(null, { interrupted: Boolean(signal?.aborted) });
+      });
     } catch (err) {
       logger.error(`${label} playback setup error:`, err.message);
       reject(err);
     }
+  });
+}
+
+function startPcmPlayer() {
+  const command = process.env.AUDIO_PLAYBACK_COMMAND?.trim();
+  if (command) {
+    return spawn(command, {
+      shell: true,
+      stdio: ['pipe', 'ignore', 'pipe'],
+    });
+  }
+
+  if (process.platform === 'linux') {
+    return spawn('aplay', ['-q', '-t', 'raw', '-f', 'S16_LE', '-r', '16000', '-c', '1'], {
+      stdio: ['pipe', 'ignore', 'pipe'],
+    });
+  }
+
+  return spawn('sox', ['-q', '-t', 'raw', '-r', '16000', '-e', 'signed-integer', '-b', '16', '-c', '1', '-', '-d'], {
+    stdio: ['pipe', 'ignore', 'pipe'],
   });
 }
 
@@ -1193,47 +1225,5 @@ function parseInworldAudioLine(line) {
  * @returns {Promise<void>}
  */
 export async function playAudio(audioBuffer) {
-  return new Promise((resolve, reject) => {
-    try {
-      logger.info('Playing audio...');
-      // For MP3 from ElevenLabs, we need ffmpeg to decode
-      // Pipe to ffmpeg then to speaker
-      const ffmpeg = spawn('ffmpeg', [
-        '-i', 'pipe:0',
-        '-f', 's16le',
-        '-acodec', 'pcm_s16le',
-        '-ar', '16000',
-        '-ac', '1',
-        'pipe:1',
-      ]);
-
-      const speaker = new Speaker({
-        channels: 1,
-        bitDepth: 16,
-        sampleRate: 16000,
-      });
-
-      ffmpeg.stdout.pipe(speaker);
-      ffmpeg.stdin.write(audioBuffer);
-      ffmpeg.stdin.end();
-
-      speaker.on('finish', () => {
-        logger.info('Audio playback complete');
-        resolve();
-      });
-
-      ffmpeg.on('error', (err) => {
-        logger.error('ffmpeg error:', err.message);
-        reject(err);
-      });
-
-      speaker.on('error', (err) => {
-        logger.error('Speaker error:', err.message);
-        reject(err);
-      });
-    } catch (err) {
-      logger.error('Playback setup error:', err.message);
-      reject(err);
-    }
-  });
+  return playAudioStream(Readable.from(audioBuffer), { label: 'Audio' });
 }
