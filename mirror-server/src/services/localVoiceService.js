@@ -157,8 +157,9 @@ export async function waitForWakeWordUtterance(options = {}) {
     });
 
     detector.stderr.on('data', (chunk) => {
-      const text = chunk.toString('utf8').trim();
-      if (text) logger.warn(`Wake detector: ${text}`);
+      const lines = chunk.toString('utf8').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const visibleLines = lines.filter((line) => !shouldSuppressWakeDetectorWarning(line));
+      if (visibleLines.length) logger.warn(`Wake detector: ${visibleLines.join('\n')}`);
     });
 
     detector.stdin.on('error', (error) => {
@@ -196,6 +197,12 @@ export async function waitForWakeWordUtterance(options = {}) {
       timeout = setTimeout(() => finish(new Error(`Wake word timed out after ${timeoutMs}ms`)), timeoutMs);
     }
   });
+}
+
+function shouldSuppressWakeDetectorWarning(line) {
+  return line.includes('[W:onnxruntime:Default, device_discovery.cc')
+    || line.includes('Specified provider \'CUDAExecutionProvider\' is not in available provider names')
+    || line === 'warnings.warn(';
 }
 
 function frameRms(frame) {
