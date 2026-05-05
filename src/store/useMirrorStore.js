@@ -3,7 +3,10 @@ import { mockCalendar, mockSpotify, mockTodos, mockWeather } from '../data/mockD
 
 const scenes = ['idle', 'weather', 'calendar', 'spotify', 'todo'];
 const autoCloseScenes = new Set(['weather', 'calendar', 'spotify', 'todo']);
+const voiceListeningTimeoutMs = Number(import.meta.env.VITE_VOICE_LISTENING_TIMEOUT_MS || 15000);
 let sceneCloseTimer;
+let voiceOverlayTimer;
+let voiceStatusTimer;
 
 export const useMirrorStore = create((set, get) => ({
   scene: 'idle',
@@ -16,6 +19,11 @@ export const useMirrorStore = create((set, get) => ({
   overlay: null,
   isListening: false,
   isSpeaking: false,
+  voiceStatus: {
+    status: 'idle',
+    text: '',
+    updatedAt: Date.now(),
+  },
   cycleScene: () => {
     const index = scenes.indexOf(get().scene);
     set({ scene: scenes[(index + 1) % scenes.length] });
@@ -24,6 +32,58 @@ export const useMirrorStore = create((set, get) => ({
   setOverlay: (overlay) => set({ overlay }),
   setListening: (isListening) => set({ isListening }),
   setSpeaking: (isSpeaking) => set({ isSpeaking }),
+  applyVoiceStatus: ({ status = 'idle', text = '' } = {}) =>
+    set((state) => {
+      window.clearTimeout(voiceOverlayTimer);
+      window.clearTimeout(voiceStatusTimer);
+
+      if (status === 'speaking' && text) {
+        const overlayId = Date.now();
+        voiceOverlayTimer = window.setTimeout(() => {
+          set((current) => (current.overlay?.id === overlayId ? { isSpeaking: false, overlay: null } : { isSpeaking: false }));
+        }, 5600);
+
+        return {
+          voiceStatus: {
+            status,
+            text,
+            updatedAt: overlayId,
+          },
+          isListening: false,
+          isSpeaking: true,
+          overlay: { id: overlayId, text },
+        };
+      }
+
+      const nextListening = status === 'wake_detected' || status === 'listening';
+      if (nextListening && voiceListeningTimeoutMs > 0) {
+        voiceStatusTimer = window.setTimeout(() => {
+          set((current) => (
+            current.voiceStatus.status === 'wake_detected' || current.voiceStatus.status === 'listening'
+              ? {
+                  voiceStatus: {
+                    status: 'idle',
+                    text: '',
+                    updatedAt: Date.now(),
+                  },
+                  isListening: false,
+                }
+              : {}
+          ));
+        }, voiceListeningTimeoutMs);
+      }
+
+      return {
+        voiceStatus: {
+          status,
+          text,
+          updatedAt: Date.now(),
+        },
+        isListening: nextListening,
+        isSpeaking: false,
+        overlay: state.overlay,
+      };
+    }),
   showSpeech: (speech) => {
     if (!speech) return;
     set({ overlay: { id: Date.now(), text: speech }, isSpeaking: true });

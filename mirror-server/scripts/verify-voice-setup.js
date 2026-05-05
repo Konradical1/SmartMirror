@@ -2,8 +2,10 @@
 
 import dotenv from 'dotenv';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { activeLlmProvider, llmConfig } from '../src/llm/client.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,10 +20,11 @@ const checks = [];
 
 // Check API Keys
 console.log('🔑 Checking API Keys...');
+const llm = llmConfig(activeLlmProvider());
 checks.push({
-  name: 'GROQ_API_KEY',
-  ok: !!process.env.GROQ_API_KEY,
-  message: process.env.GROQ_API_KEY ? '✅ Configured' : '❌ Missing (Get from console.groq.com)',
+  name: llm.apiKeyName,
+  ok: !!llm.apiKey,
+  message: llm.apiKey ? `✅ Configured (${llm.name})` : `❌ Missing for ${llm.name}`,
 });
 
 checks.push({
@@ -34,6 +37,12 @@ checks.push({
   name: 'ELEVENLABS_VOICE_ID',
   ok: !!process.env.ELEVENLABS_VOICE_ID,
   message: process.env.ELEVENLABS_VOICE_ID ? `✅ Configured (${process.env.ELEVENLABS_VOICE_ID})` : '⚠️  Using default',
+});
+
+checks.push({
+  name: 'STT_PROVIDER',
+  ok: true,
+  message: `✅ Using ${process.env.STT_PROVIDER || 'elevenlabs'} STT`,
 });
 
 // Check system commands
@@ -53,8 +62,57 @@ function checkCommand(cmd, name) {
   });
 }
 
+function checkWhisper() {
+  return new Promise((resolve) => {
+    const provider = (process.env.STT_PROVIDER || 'elevenlabs').toLowerCase();
+
+    if (provider === 'elevenlabs' || provider === 'scribe') {
+      checks.push({
+        name: 'Whisper (openai-whisper)',
+        ok: true,
+        message: 'ℹ️  Optional fallback only (ElevenLabs STT is default)',
+      });
+      resolve();
+      return;
+    }
+
+    const envWhisper = process.env.WHISPER_BIN?.trim();
+    const venvWhisper = path.resolve(__dirname, '../.venv-voice/bin/whisper');
+
+    if (envWhisper) {
+      checks.push({
+        name: 'Whisper (openai-whisper)',
+        ok: true,
+        message: `✅ Configured (${envWhisper})`,
+      });
+      resolve();
+      return;
+    }
+
+    if (fs.existsSync(venvWhisper)) {
+      checks.push({
+        name: 'Whisper (openai-whisper)',
+        ok: true,
+        message: `✅ Installed (${venvWhisper})`,
+      });
+      resolve();
+      return;
+    }
+
+    const proc = spawn('which', ['whisper'], { stdio: 'pipe' });
+    proc.on('close', (code) => {
+      checks.push({
+        name: 'Whisper (openai-whisper)',
+        ok: code === 0,
+        message: code === 0 ? '✅ Installed' : '❌ Missing (Install: openai-whisper)',
+      });
+      resolve();
+    });
+  });
+}
+
 await Promise.all([
-  checkCommand('whisper', 'Whisper (openai-whisper)'),
+  checkWhisper(),
   checkCommand('ffmpeg', 'FFmpeg'),
   checkCommand('sox', 'SoX'),
 ]);
@@ -62,7 +120,7 @@ await Promise.all([
 // Check Node modules
 console.log('\n📦 Checking Node Modules...');
 
-const modules = ['mic', 'speaker', 'wav-encoder', 'dotenv', 'openai'];
+const modules = ['mic', 'speaker', 'wav-encoder', 'dotenv'];
 for (const mod of modules) {
   try {
     await import(mod);
@@ -93,12 +151,12 @@ checks.forEach((check) => {
 
 console.log('\n');
 if (allOk) {
-  console.log('✨ All checks passed! Ready to run npm run test:voice\n');
+  console.log('✨ All checks passed! Ready to run test:jarvis\n');
 } else {
   console.log('⚠️  Some checks failed. See messages above.\n');
   console.log('Next steps:');
-  console.log('  1. Add GROQ_API_KEY to .env (from console.groq.com)');
+  console.log(`  1. Add ${llm.apiKeyName} and ELEVENLABS_API_KEY to .env`);
   console.log('  2. macOS: brew install ffmpeg sox');
   console.log('  3. Raspberry Pi: sudo apt-get install ffmpeg sox alsa-utils');
-  console.log('  4. Whisper: .venv-voice/bin/pip install openai-whisper\n');
+  console.log('  4. Optional fallback: .venv-voice/bin/pip install openai-whisper\n');
 }

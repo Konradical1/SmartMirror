@@ -11,44 +11,35 @@ export async function refreshTodos() {
   return todos;
 }
 
-export async function handleTodo(params = {}, speech = '') {
-  const todos = await refreshTodos();
+export async function handleTodo(params = {}) {
   setScene('todo');
   setLastIntent('SHOW_TODO');
-  const responseSpeech = todoSpeech(todos);
-  broadcastAction('SHOW_TODO', {}, responseSpeech);
-  return { ok: true, speech: responseSpeech, data: { todos } };
+  broadcastAction('SHOW_TODO');
+  const todos = await refreshTodos();
+  return { ok: true, data: { todos }, ui: { scene: 'todo' } };
 }
 
-export async function handleAddTodo(params = {}, speech = '') {
+export async function handleAddTodo(params = {}) {
   const title = todoTitle(params);
   if (!title) throw new Error('ADD_TODO requires a todo title.');
   await addTodo({ ...params, title });
-  await refreshTodos();
+  const todos = await refreshTodos();
   setScene('todo');
   setLastIntent('ADD_TODO');
-  const responseSpeech = `Added ${title}, sir. Let us pretend this improves productivity.`;
-  broadcastAction('ADD_TODO', {}, responseSpeech);
-  return { ok: true, speech: responseSpeech, data: { title } };
+  broadcastAction('ADD_TODO');
+  return { ok: true, data: { title, todos }, ui: { scene: 'todo' } };
 }
 
-export async function handleCheckTodo(params = {}, speech = '') {
+export async function handleCheckTodo(params = {}) {
   const title = todoTitle(params);
   if (!title) throw new Error('CHECK_TODO requires a todo title.');
   const checked = await checkTodo({ ...params, title });
   if (!checked) throw new Error(`Could not find ${title} on your to-do list.`);
-  await refreshTodos();
+  const todos = await refreshTodos();
   setScene('todo');
   setLastIntent('CHECK_TODO');
-  const responseSpeech = `Checked off ${title}, sir. Progress has been detected.`;
-  broadcastAction('CHECK_TODO', {}, responseSpeech);
-  return { ok: true, speech: responseSpeech, data: { title } };
-}
-
-function todoSpeech(todos = []) {
-  if (!todos.length) return 'No open tasks, sir. Either impressive or deeply suspicious.';
-  const sample = todos.slice(0, 3).map((todo) => todo.title).join(', ');
-  return `${todos.length} open tasks, sir: ${sample}.`;
+  broadcastAction('CHECK_TODO');
+  return { ok: true, data: { title, todos }, ui: { scene: 'todo' } };
 }
 
 function todoTitle(params = {}) {

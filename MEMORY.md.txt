@@ -1,0 +1,85 @@
+# MEMORY.md
+
+## Konrad
+
+- Full name: Konrad Fischer.
+- 17 years old; junior in high school as of 2026-03-18.
+- 6'5", about 185 lbs.
+- Student at Anderson High School.
+- Lives in Cincinnati; timezone America/New_York.
+- Prefers blunt, efficient communication.
+- Wants Jarvis to keep learning about him over time and proactively save important new context/memories from chats.
+- For straightforward reminders, prefers Jarvis to just schedule them without asking for confirmation.
+- Interests: computer science, Unity game development, videography, photography, graphic design, music, and sports.
+- Plays piano, guitar sometimes, and can also play sax rarely.
+- Just finished varsity basketball season and is now in track season; does high jump and feels strong at it.
+- Has a 4.45 weighted GPA and is proud of it.
+- Has a girlfriend named Lucy; relationship has been about 2 years total, with a 2-month breakup starting October 4 before they got back together.
+- Runs the Instagram page fisch.media.
+- Interested in sports photography/videography, especially Anderson High School football content, and has interest in filming weddings in Cincinnati.
+- Likes branding/design and has done logo work for people.
+- Uses FL Studio and wanted music with a vibe similar to Trippie Redd's "Space Time."
+- Took AP Computer Science A and AP Seminar last year.
+- Has worked with a small development team.
+- Lead video editor for his school's newspaper and also does video work through MAC (Media Athletics Collaborative).
+- Has access to strong school media gear and values that opportunity.
+- Higher-level pattern: very creative and ambitious; blends tech, design, media, entrepreneurship, and athletics.
+- Tends to jump between building things, branding things, and improving things across games, media, websites, and business ideas.
+- Often feels stretched across school, sports, editing, and creative projects.
+- Looking forward to summer as of 2026-03-18.
+- Main goals: become a better athlete, lift consistently, stretch daily, keep being a better boyfriend, finish more projects, and build things worth showing on a resume.
+- Wants to be a leader and creator, and ultimately be in charge of his own life.
+- Likely path after high school: college plus networking and trying to start a business; wants freedom and creative control through business.
+- His definition of success is not endless money; it's enough money to feel free and not worry about money, plus a nice loving family and peace with his life.
+- Has stress/anxiety about future career direction, money, and the effect AI may have on jobs.
+- Biggest recurring stressors: uncertainty about the future, fear of not being successful, fear of losing Lucy / going to different colleges, and frustration about work.
+
+## Unity / technical background
+
+- Worked on inventory/hotbar systems, draggable inventory items, save/load inventory data, and slot systems with multiple slot types.
+- Worked on movement systems for ships, carts, and players; drift-based 2D movement; smooth camera systems; car collision/explosion systems; procedural texture generation; grounded spherecast checks; root motion control; multiplayer-related Netcode Transform usage; villager/NPC AI with needs, weighted tasks, NavMesh movement, and simulation logic.
+
+## Current priorities
+
+- Priority 1: athletics, though motivation/consistency is conflicted; part of him cares deeply and part of him checks out.
+- Wants Jarvis especially for accountability and organization.
+- Wants accountability to be hard/blunt, not soft.
+- Sees Unity/game development as one of his clearest standout strengths.
+- Biggest consistency problems: athletics habits, healthy habits, stretching, and finishing projects.
+- Most common reasons he falls off: tiredness from poor sleep, phone distraction, and getting interested in something else.
+
+## Projects and ideas
+
+- Likes game ideas that are quick, colorful, repetitive, satisfying, and addictive with strong feedback.
+- Explored Block Blitz (Block Blast-style) and Circuit Surfer.
+- Building After The Storm, a top-down isometric resource management/rebuilding sim about restoring a town after a natural disaster.
+- Wanted a 2025 Games for Change Student Challenge game around resource distribution and maintaining peace.
+- Considered a two-way radio mobile app in Unity.
+- Worked on/described LifeSync, an AI-assisted mindful living app for journaling, sleep, meals, exercise, and habit/emotion pattern recognition.
+- Currently working on The Feeding Block, a top-down farming game about growing crops for a city while fighting weather and other pressures.
+- Has been making games in Unity since 7th grade.
+- Now often uses Cursor for coding while he directs ideas, assets, and assembly in Unity.
+- Uncertain whether game dev is the long-term career path; enjoys it and is strong at it, but is skeptical about pay and thinks college for it might feel too easy/boring.
+
+## Business / brand history
+
+- Previously explored Aliva, In Your Memory, and OriginWire.
+- Bought wearaliva.com for Aliva; brand concept was minimalist/modern black-and-white with elegant serif branding.
+- Bought originwire.com for OriginWire; concept was a sleek AI-startup-style digital media/web agency site.
+- Has since given up on those brand/startup ideas.
+
+## Social media / content
+
+- Interested in social media strategy.
+- Previously wanted to post two TikToks per day and asked about optimal posting times/frequency.
+- Liked the name Product Picks for a TikTok/YouTube Shorts account about cool products.
+
+## Personal
+
+- Konrad has trouble sleeping, often feels tired, reports not getting enough deep sleep, and mentions circadian rhythm disorder.
+- Has low blood pressure and takes midodrine before sports.
+- Right ankle has been sprained multiple times and never fully healed.
+- Often feels sore/tight, especially hamstrings; also has patellar tendonitis.
+- Usually feels confident/cocky, but becomes more insecure around Lucy and the possibility of losing the relationship.
+- Lucy is a major part of his identity; they've known each other since 4th grade.
+- Lucy had been struggling with sleep for several months; Konrad had been trying to reason through causes and solutions.
