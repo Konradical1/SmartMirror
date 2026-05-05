@@ -11,7 +11,6 @@ warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL.*")
 
 import numpy as np
 import openwakeword
-from openwakeword.utils import download_models
 from openwakeword.model import Model
 
 SAMPLE_RATE = 16000
@@ -32,10 +31,6 @@ def resolve_wake_model_path():
     if matches:
         return matches[0]
 
-    download_models(model_names=[wake_model], target_directory=str(model_dir))
-    matches = sorted(glob.glob(str(model_dir / f"{wake_model}*.onnx")))
-    if matches:
-        return matches[0]
     raise RuntimeError(f"Could not find openWakeWord model for {wake_model}. Set VOICE_WAKE_MODEL_PATH.")
 
 
