@@ -31,7 +31,7 @@ export function useMirrorSocket() {
           const message = JSON.parse(event.data);
           if (message.type === 'ACTION') applyAction(message.payload);
           if (message.type === 'DATA_UPDATE') applyDataUpdate(message.payload);
-          if (message.type === 'OVERLAY') showSpeech(message.payload?.speech || message.payload?.text);
+          if (message.type === 'OVERLAY') showSpeech(message.payload?.speech || message.payload?.text, message.payload);
           if (message.type === 'VOICE_STATUS') applyVoiceStatus(message.payload);
         } catch {
           // Ignore malformed local dev messages.

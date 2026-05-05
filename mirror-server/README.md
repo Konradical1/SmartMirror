@@ -138,6 +138,7 @@ SHOW_CALENDAR
 ADD_CALENDAR_EVENT
 EDIT_CALENDAR_EVENT
 DELETE_CALENDAR_EVENT
+SHOW_TIME
 SHOW_SPOTIFY
 SPOTIFY_NEXT
 SPOTIFY_PREVIOUS
@@ -148,6 +149,7 @@ ADD_TODO
 CHECK_TODO
 SHOW_EMAIL
 DISPLAY_MESSAGE
+END_CONVERSATION
 IDLE
 ```
 
@@ -190,31 +192,50 @@ error
 
 ## Raspberry Pi Wake Word
 
-The Pi voice daemon uses openWakeWord locally, so it does not require Picovoice or a cloud wake-word key. The default model is `hey_jarvis`. For best results with `jarvis`, `hey jarvis`, and `yo jarvis`, train or download a custom openWakeWord model and set `VOICE_WAKE_MODEL` to that model path.
+The Pi voice command now runs the same local Jarvis pipeline as `test:jarvis -- --voice`: openWakeWord wake detection, configured STT, Jarvis intent routing, tool execution, and provider-swappable TTS playback. The default wake model is `hey_jarvis`. For best results with `jarvis`, `hey jarvis`, and `yo jarvis`, train or download a custom openWakeWord model and set `VOICE_WAKE_MODEL_PATH` to that model path.
 
-Required env:
+Recommended env:
 
 ```bash
-ELEVENLABS_API_KEY=
-ELEVENLABS_AGENT_ID=
 MIRROR_BASE_URL=http://127.0.0.1:3001
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=openai/gpt-5.4-nano
+STT_PROVIDER=deepgram
+DEEPGRAM_API_KEY=
+TTS_PROVIDER=inworld
+INWORLD_API_KEY=
+INWORLD_VOICE_ID=Craig
 VOICE_WAKE_MODEL=hey_jarvis
 VOICE_WAKE_MODEL_PATH=
 VOICE_WAKE_THRESHOLD=0.45
-VOICE_ARECORD_DEVICE=
+VOICE_CHAT_RECORD_MS=4000
+VOICE_CHAT_SILENCE_FRAMES=4
+VOICE_CONVERSATION_SILENCE_MS=5000
+VOICE_CONTEXT_REFRESH_MODE=background
+VOICE_CONTEXT_REFRESH_COOLDOWN_MS=60000
+AUDIO_DEVICE=
 VOICE_FRAME_MS=80
 VOICE_PRE_ROLL_MS=1200
-VOICE_IDLE_SESSION_MS=9000
-VOICE_MAX_SESSION_MS=30000
 ```
 
-Install the Python voice dependencies on the Pi:
+Install system and voice dependencies on the Pi:
 
 ```bash
+sudo apt-get update
+sudo apt-get install -y ffmpeg sox alsa-utils python3-venv
+npm install
+npm --prefix mirror-server install
 cd mirror-server
 python3 -m venv .venv-voice
 .venv-voice/bin/pip install -r requirements-voice.txt
 cd ..
+```
+
+Verify setup:
+
+```bash
+npm --prefix mirror-server run verify:voice
 ```
 
 Run it after the mirror server is running:
@@ -223,10 +244,22 @@ Run it after the mirror server is running:
 npm --prefix mirror-server run voice
 ```
 
+The root package exposes the same command:
+
+```bash
+npm run voice
+```
+
+The old ElevenLabs Agent websocket daemon is still available for comparison:
+
+```bash
+npm --prefix mirror-server run voice:legacy-agent
+```
+
 Audio path:
 
 ```text
-USB mic -> arecord -> openWakeWord -> 1.2s pre-roll buffer -> ElevenLabs signed Agent WebSocket -> PCM audio playback with aplay
+USB mic -> node mic/sox -> openWakeWord -> final STT -> Jarvis pipeline -> streaming TTS -> ffmpeg -> speaker
 ```
 
 Check microphone detection on the Pi:
@@ -236,6 +269,8 @@ arecord -l
 ```
 
 If multiple capture devices are listed, set `VOICE_ARECORD_DEVICE` to the ALSA device name, for example `plughw:1,0`. Leave it empty to use the system default.
+
+For the local Jarvis voice runner, set `AUDIO_DEVICE` if the default microphone is wrong.
 
 Todo examples:
 

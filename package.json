@@ -7,6 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "mock:ws": "npm --prefix mirror-server run dev",
+    "voice": "npm --prefix mirror-server run voice --",
     "integrations": "node scripts/run-integrations.js",
     "test:jarvis": "npm --prefix mirror-server run test:jarvis --",
     "auth:spotify": "node scripts/oauth-helper.js spotify",

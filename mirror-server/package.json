@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "voice": "./.venv-voice/bin/python scripts/voice-agent-openwakeword.py",
+    "voice": "node scripts/test-jarvis.js --voice",
+    "voice:legacy-agent": "./.venv-voice/bin/python scripts/voice-agent-openwakeword.py",
     "test:jarvis": "node scripts/test-jarvis.js",
     "test:calendar-dates": "node scripts/test-calendar-dates.js",
     "verify:voice": "node scripts/verify-voice-setup.js"

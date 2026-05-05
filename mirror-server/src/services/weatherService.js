@@ -3,7 +3,7 @@ import fetch from 'node-fetch';
 const latitude = process.env.WEATHER_LATITUDE || '39.0714';
 const longitude = process.env.WEATHER_LONGITUDE || '-84.3505';
 const timezone = process.env.WEATHER_TIMEZONE || 'America/New_York';
-const location = process.env.WEATHER_LOCATION || 'Anderson Township, OH';
+const location = process.env.WEATHER_LOCATION || 'Anderson Township, Ohio';
 
 export async function getWeather(params = {}) {
   const target = await resolveWeatherTarget(params);
@@ -24,7 +24,7 @@ export async function getWeather(params = {}) {
   const data = await response.json();
 
   return {
-    location: target.location,
+    location: formatWeatherLocation(target.location),
     temperature: Math.round(data.current?.temperature_2m ?? 0),
     feelsLike: Math.round(data.current?.apparent_temperature ?? data.current?.temperature_2m ?? 0),
     condition: weatherLabel(data.current?.weather_code),
@@ -64,7 +64,7 @@ function defaultWeatherTarget() {
     latitude,
     longitude,
     timezone,
-    location,
+    location: formatWeatherLocation(location),
   };
 }
 
@@ -107,3 +107,65 @@ function weatherLabel(code) {
   if ([95, 96, 99].includes(code)) return 'Storm';
   return 'Partly cloudy';
 }
+
+function formatWeatherLocation(value) {
+  return String(value || '')
+    .split(',')
+    .map((part) => US_STATE_NAMES[part.trim().toUpperCase()] || part.trim())
+    .filter(Boolean)
+    .join(', ');
+}
+
+const US_STATE_NAMES = {
+  AL: 'Alabama',
+  AK: 'Alaska',
+  AZ: 'Arizona',
+  AR: 'Arkansas',
+  CA: 'California',
+  CO: 'Colorado',
+  CT: 'Connecticut',
+  DE: 'Delaware',
+  FL: 'Florida',
+  GA: 'Georgia',
+  HI: 'Hawaii',
+  ID: 'Idaho',
+  IL: 'Illinois',
+  IN: 'Indiana',
+  IA: 'Iowa',
+  KS: 'Kansas',
+  KY: 'Kentucky',
+  LA: 'Louisiana',
+  ME: 'Maine',
+  MD: 'Maryland',
+  MA: 'Massachusetts',
+  MI: 'Michigan',
+  MN: 'Minnesota',
+  MS: 'Mississippi',
+  MO: 'Missouri',
+  MT: 'Montana',
+  NE: 'Nebraska',
+  NV: 'Nevada',
+  NH: 'New Hampshire',
+  NJ: 'New Jersey',
+  NM: 'New Mexico',
+  NY: 'New York',
+  NC: 'North Carolina',
+  ND: 'North Dakota',
+  OH: 'Ohio',
+  OK: 'Oklahoma',
+  OR: 'Oregon',
+  PA: 'Pennsylvania',
+  RI: 'Rhode Island',
+  SC: 'South Carolina',
+  SD: 'South Dakota',
+  TN: 'Tennessee',
+  TX: 'Texas',
+  UT: 'Utah',
+  VT: 'Vermont',
+  VA: 'Virginia',
+  WA: 'Washington',
+  WV: 'West Virginia',
+  WI: 'Wisconsin',
+  WY: 'Wyoming',
+  DC: 'District of Columbia',
+};

@@ -17,6 +17,8 @@ console.log('║     Local Voice Pipeline - Setup Verification       ║');
 console.log('╚════════════════════════════════════════════════════╝\n');
 
 const checks = [];
+const sttProvider = (process.env.STT_PROVIDER || 'elevenlabs').toLowerCase();
+const ttsProvider = (process.env.TTS_PROVIDER || process.env.VOICE_TTS_PROVIDER || 'elevenlabs').toLowerCase();
 
 // Check API Keys
 console.log('🔑 Checking API Keys...');
@@ -27,22 +29,51 @@ checks.push({
   message: llm.apiKey ? `✅ Configured (${llm.name})` : `❌ Missing for ${llm.name}`,
 });
 
-checks.push({
-  name: 'ELEVENLABS_API_KEY',
-  ok: !!process.env.ELEVENLABS_API_KEY,
-  message: process.env.ELEVENLABS_API_KEY ? '✅ Configured' : '❌ Missing',
-});
+if (sttProvider === 'elevenlabs' || sttProvider === 'scribe' || ttsProvider === 'elevenlabs') {
+  checks.push({
+    name: 'ELEVENLABS_API_KEY',
+    ok: !!process.env.ELEVENLABS_API_KEY,
+    message: process.env.ELEVENLABS_API_KEY ? '✅ Configured' : '❌ Missing',
+  });
+}
 
-checks.push({
-  name: 'ELEVENLABS_VOICE_ID',
-  ok: !!process.env.ELEVENLABS_VOICE_ID,
-  message: process.env.ELEVENLABS_VOICE_ID ? `✅ Configured (${process.env.ELEVENLABS_VOICE_ID})` : '⚠️  Using default',
-});
+if (sttProvider === 'deepgram' || sttProvider === 'dg') {
+  checks.push({
+    name: 'DEEPGRAM_API_KEY',
+    ok: !!process.env.DEEPGRAM_API_KEY,
+    message: process.env.DEEPGRAM_API_KEY ? '✅ Configured' : '❌ Missing',
+  });
+}
+
+if (ttsProvider === 'inworld') {
+  checks.push({
+    name: 'INWORLD_API_KEY',
+    ok: !!process.env.INWORLD_API_KEY,
+    message: process.env.INWORLD_API_KEY ? '✅ Configured' : '❌ Missing',
+  });
+  checks.push({
+    name: 'INWORLD_VOICE_ID',
+    ok: true,
+    message: `✅ Using ${process.env.INWORLD_VOICE_ID || 'Dennis'} voice`,
+  });
+} else {
+  checks.push({
+    name: 'ELEVENLABS_VOICE_ID',
+    ok: !!process.env.ELEVENLABS_VOICE_ID,
+    message: process.env.ELEVENLABS_VOICE_ID ? `✅ Configured (${process.env.ELEVENLABS_VOICE_ID})` : '⚠️  Using default',
+  });
+}
 
 checks.push({
   name: 'STT_PROVIDER',
   ok: true,
-  message: `✅ Using ${process.env.STT_PROVIDER || 'elevenlabs'} STT`,
+  message: `✅ Using ${sttProvider} STT`,
+});
+
+checks.push({
+  name: 'TTS_PROVIDER',
+  ok: true,
+  message: `✅ Using ${ttsProvider} TTS`,
 });
 
 // Check system commands
@@ -64,13 +95,11 @@ function checkCommand(cmd, name) {
 
 function checkWhisper() {
   return new Promise((resolve) => {
-    const provider = (process.env.STT_PROVIDER || 'elevenlabs').toLowerCase();
-
-    if (provider === 'elevenlabs' || provider === 'scribe') {
+    if (['elevenlabs', 'scribe', 'deepgram', 'dg'].includes(sttProvider)) {
       checks.push({
         name: 'Whisper (openai-whisper)',
         ok: true,
-        message: 'ℹ️  Optional fallback only (ElevenLabs STT is default)',
+        message: `ℹ️  Optional fallback only (${sttProvider} STT is configured)`,
       });
       resolve();
       return;
@@ -115,6 +144,7 @@ await Promise.all([
   checkWhisper(),
   checkCommand('ffmpeg', 'FFmpeg'),
   checkCommand('sox', 'SoX'),
+  ...(process.platform === 'linux' ? [checkCommand('arecord', 'ALSA arecord')] : []),
 ]);
 
 // Check Node modules
@@ -155,7 +185,7 @@ if (allOk) {
 } else {
   console.log('⚠️  Some checks failed. See messages above.\n');
   console.log('Next steps:');
-  console.log(`  1. Add ${llm.apiKeyName} and ELEVENLABS_API_KEY to .env`);
+  console.log(`  1. Add ${llm.apiKeyName}, your STT key, and your TTS key to .env`);
   console.log('  2. macOS: brew install ffmpeg sox');
   console.log('  3. Raspberry Pi: sudo apt-get install ffmpeg sox alsa-utils');
   console.log('  4. Optional fallback: .venv-voice/bin/pip install openai-whisper\n');

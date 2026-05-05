@@ -10,8 +10,11 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import warnings
 from collections import deque
 from pathlib import Path
+
+warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL.*")
 
 import numpy as np
 import websockets

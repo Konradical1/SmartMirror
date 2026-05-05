@@ -8,6 +8,7 @@ import { handleEmail } from './handlers/email.js';
 import { handleSpotify, handleSpotifyControl } from './handlers/spotify.js';
 import { handleAddTodo, handleCheckTodo, handleTodo } from './handlers/todo.js';
 import { handleWeather } from './handlers/weather.js';
+import { buildNowContext } from './jarvis/context.js';
 import { loadMemory, updateMemory } from './services/memoryService.js';
 import { setLastIntent, setScene } from './state.js';
 import { broadcastAction } from './websocket.js';
@@ -16,23 +17,27 @@ export async function handleIntent(intent, params = {}) {
   switch (intent) {
     case 'SHOW_WEATHER':
       return handleWeather(params);
+    case 'SHOW_TIME': {
+      setLastIntent('SHOW_TIME');
+      return { ok: true, data: { time: buildNowContext() } };
+    }
     case 'SHOW_CALENDAR':
       return handleCalendar(params);
     case 'ADD_CALENDAR_EVENT':
     case 'ADD_CALENDAR':
     case 'CREATE_CALENDAR_EVENT':
     case 'CREATE_EVENT':
-      return handleAddCalendarEvent(params, speech);
+      return handleAddCalendarEvent(params);
     case 'EDIT_CALENDAR_EVENT':
     case 'EDIT_CALENDAR':
     case 'UPDATE_CALENDAR_EVENT':
     case 'UPDATE_EVENT':
-      return handleEditCalendarEvent(params, speech);
+      return handleEditCalendarEvent(params);
     case 'DELETE_CALENDAR_EVENT':
     case 'DELETE_CALENDAR':
     case 'REMOVE_CALENDAR_EVENT':
     case 'REMOVE_EVENT':
-      return handleDeleteCalendarEvent(params, speech);
+      return handleDeleteCalendarEvent(params);
     case 'SHOW_SPOTIFY':
       return handleSpotify(params);
     case 'SPOTIFY_NEXT':
@@ -71,6 +76,9 @@ export async function handleIntent(intent, params = {}) {
     case 'DISPLAY_MESSAGE':
       setLastIntent('DISPLAY_MESSAGE');
       return { ok: true, data: { message: params.message || params.text || '' } };
+    case 'END_CONVERSATION':
+      setLastIntent('END_CONVERSATION');
+      return { ok: true, data: { ended: true } };
     case 'IDLE':
       setScene('idle');
       setLastIntent('IDLE');

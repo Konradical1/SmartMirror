@@ -14,7 +14,7 @@ export function buildJarvisContext() {
   };
 }
 
-function buildNowContext() {
+export function buildNowContext() {
   const timezone = process.env.WEATHER_TIMEZONE || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York';
   const now = new Date();
   return {
