@@ -52,7 +52,10 @@ def main():
     frame_bytes = SAMPLE_RATE * frame_ms // 1000 * SAMPLE_WIDTH_BYTES
 
     model_path = resolve_wake_model_path()
-    model = Model(wakeword_models=[model_path], inference_framework="onnx")
+    try:
+        model = Model(wakeword_models=[model_path], inference_framework="onnx")
+    except TypeError:
+        model = Model(wakeword_model_paths=[model_path])
     wake_label = next(iter(model.models.keys()))
     emit({"type": "ready", "model": wake_label, "threshold": threshold, "frameMs": frame_ms})
 
