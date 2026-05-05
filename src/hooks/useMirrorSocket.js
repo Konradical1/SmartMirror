@@ -6,6 +6,7 @@ export function useMirrorSocket() {
   const applyDataUpdate = useMirrorStore((state) => state.applyDataUpdate);
   const showSpeech = useMirrorStore((state) => state.showSpeech);
   const setListening = useMirrorStore((state) => state.setListening);
+  const applyVoiceStatus = useMirrorStore((state) => state.applyVoiceStatus);
 
   useEffect(() => {
     let socket;
@@ -13,8 +14,11 @@ export function useMirrorSocket() {
     let closed = false;
 
     const connect = () => {
+      const configuredUrl = import.meta.env.VITE_MIRROR_WS_URL;
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      socket = new WebSocket(`${protocol}//${window.location.host}`);
+      const devUrl = `${protocol}//${window.location.hostname}:3001`;
+      const defaultUrl = `${protocol}//${window.location.host}`;
+      socket = new WebSocket(configuredUrl || (import.meta.env.DEV ? devUrl : defaultUrl));
 
       socket.addEventListener('open', () => setListening(false));
       socket.addEventListener('close', () => {
@@ -28,6 +32,7 @@ export function useMirrorSocket() {
           if (message.type === 'ACTION') applyAction(message.payload);
           if (message.type === 'DATA_UPDATE') applyDataUpdate(message.payload);
           if (message.type === 'OVERLAY') showSpeech(message.payload?.speech || message.payload?.text);
+          if (message.type === 'VOICE_STATUS') applyVoiceStatus(message.payload);
         } catch {
           // Ignore malformed local dev messages.
         }
@@ -41,5 +46,5 @@ export function useMirrorSocket() {
       window.clearTimeout(reconnectTimer);
       socket?.close();
     };
-  }, [applyAction, applyDataUpdate, setListening, showSpeech]);
+  }, [applyAction, applyDataUpdate, applyVoiceStatus, setListening, showSpeech]);
 }

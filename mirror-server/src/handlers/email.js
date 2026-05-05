@@ -1,9 +1,14 @@
 import { setLastIntent } from '../state.js';
 import { broadcastAction } from '../websocket.js';
 
-export async function handleEmail(params = {}, speech = '') {
+export async function handleEmail(params = {}) {
   setLastIntent('SHOW_EMAIL');
-  const responseSpeech = 'Email is not connected yet, sir. One inbox disaster at a time.';
-  broadcastAction('IDLE', {}, responseSpeech);
-  return { ok: true, speech: responseSpeech };
+  broadcastAction('IDLE');
+  return {
+    ok: true,
+    data: {
+      connected: false,
+      message: 'Email is not connected yet.',
+    },
+  };
 }

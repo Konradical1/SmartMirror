@@ -2,3 +2,5 @@ node_modules
 dist
 .env
 .DS_Store
+mirror-server/.venv-voice/
+mirror-server/temp/

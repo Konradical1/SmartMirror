@@ -16,20 +16,39 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * @returns {Promise<Buffer>} Raw PCM audio buffer
  */
 export async function recordAudio(durationMs = 10000) {
+  return recordAudioWithOptions(durationMs, {});
+}
+
+/**
+ * Record audio from microphone with explicit options.
+ * @param {number} durationMs - Maximum duration in milliseconds
+ * @param {Object} options - Recording options
+ * @returns {Promise<Buffer>} Raw PCM audio buffer
+ */
+export async function recordAudioWithOptions(durationMs = 10000, options = {}) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     const sampleRate = 16000;
     const channels = 1;
     const bitDepth = 16;
+    const recordMs = Number(options.recordMs ?? process.env.VOICE_RECORD_MS ?? durationMs);
+    const silenceFrames = Number(options.silenceFrames ?? process.env.VOICE_SILENCE_FRAMES ?? 4);
 
     logger.info('Starting microphone recording...');
+
+    const homebrewRec = '/opt/homebrew/bin/rec';
+    const intelRec = '/usr/local/bin/rec';
+    const recPrefix = fs.existsSync(homebrewRec) ? '/opt/homebrew/bin' : fs.existsSync(intelRec) ? '/usr/local/bin' : null;
+    if (recPrefix && !process.env.PATH?.includes(recPrefix)) {
+      process.env.PATH = `${recPrefix}:${process.env.PATH || ''}`;
+    }
 
     const micInstance = new Mic({
       rate: sampleRate,
       channels,
-      exitOnSilence: false,
+      exitOnSilence: Number.isFinite(silenceFrames) ? silenceFrames : 0,
       debug: false,
-      device: process.env.AUDIO_DEVICE || undefined,
+      device: options.device || process.env.AUDIO_DEVICE || undefined,
     });
 
     const micStream = micInstance.getAudioStream();
@@ -44,11 +63,17 @@ export async function recordAudio(durationMs = 10000) {
       reject(err);
     });
 
+    micStream.on('silence', () => {
+      if (silenceFrames > 0) {
+        micInstance.stop();
+      }
+    });
+
     micInstance.start();
 
     const timeout = setTimeout(() => {
       micInstance.stop();
-    }, durationMs);
+    }, recordMs);
 
     micStream.on('end', () => {
       clearTimeout(timeout);
@@ -57,6 +82,56 @@ export async function recordAudio(durationMs = 10000) {
       resolve(audioBuffer);
     });
   });
+}
+
+/**
+ * Transcribe audio using ElevenLabs Scribe batch STT.
+ * @param {Buffer} audioBuffer - WAV-formatted audio buffer
+ * @param {string} model - ElevenLabs STT model
+ * @returns {Promise<Object>} Transcription result
+ */
+export async function transcribeWithElevenLabs(audioBuffer, model = process.env.ELEVENLABS_STT_MODEL || 'scribe_v2') {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    throw new Error('ELEVENLABS_API_KEY not set in environment');
+  }
+
+  logger.info(`Transcribing with ElevenLabs STT (${model})...`);
+
+  const formData = new FormData();
+  formData.append('model_id', model);
+  formData.append('file', new Blob([audioBuffer], { type: 'audio/wav' }), 'audio.wav');
+
+  const language = process.env.STT_LANGUAGE || process.env.ELEVENLABS_STT_LANGUAGE || 'en';
+  if (language) {
+    formData.append('language_code', language);
+  }
+
+  const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+    method: 'POST',
+    headers: {
+      'xi-api-key': apiKey,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`ElevenLabs STT error: ${response.status} ${errorText}`);
+  }
+
+  const result = await response.json();
+  const transcript = normalizeTranscriptText(result.text);
+  logger.info(`Transcript: "${transcript}"`);
+
+  return {
+    text: transcript,
+    source: 'elevenlabs',
+    noSpeechProb: transcript ? 0 : 1,
+    avgLogprob: 0,
+    words: result.words || [],
+    raw: result,
+  };
 }
 
 /**
@@ -99,14 +174,40 @@ export async function transcribeWithWhisper(audioBuffer, model = 'base') {
 
       logger.info(`Transcribing with Whisper (${model})...`);
 
+      const venvWhisper = path.resolve(__dirname, '../../.venv-voice/bin/whisper');
+      const envWhisper = process.env.WHISPER_BIN?.trim();
+      let whisperBin = null;
+
+      if (envWhisper && fs.existsSync(envWhisper)) {
+        whisperBin = envWhisper;
+      } else if (fs.existsSync(venvWhisper)) {
+        whisperBin = venvWhisper;
+      } else {
+        const whichResult = spawnSync('which', ['whisper'], { encoding: 'utf-8' });
+        if (whichResult.status === 0) {
+          whisperBin = 'whisper';
+        }
+      }
+
+      if (!whisperBin) {
+        fs.unlinkSync(tempFile);
+        throw new Error('Whisper CLI not found. Install openai-whisper in .venv-voice or set WHISPER_BIN.');
+      }
+
       // Call whisper via subprocess
-      const whisper = spawn('whisper', [tempFile, '--model', model, '--output_format', 'json', '--output_dir', tempDir, '--language', 'en', '--no_speech_threshold', '0.6'], {
+      const whisper = spawn(whisperBin, [tempFile, '--model', model, '--output_format', 'json', '--output_dir', tempDir, '--language', 'en', '--no_speech_threshold', '0.6'], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
       let stderr = '';
       whisper.stderr.on('data', (data) => {
         stderr += data.toString();
+      });
+
+      whisper.on('error', (err) => {
+        fs.unlinkSync(tempFile);
+        logger.error('Whisper spawn error:', err.message);
+        reject(err);
       });
 
       whisper.on('close', (code) => {
@@ -140,70 +241,72 @@ export async function transcribeWithWhisper(audioBuffer, model = 'base') {
   });
 }
 
+function normalizeTranscriptText(text) {
+  return (text || '').replace(/\s+/g, ' ').trim();
+}
+
+function shouldIgnoreTranscript(result) {
+  const text = normalizeTranscriptText(result?.text);
+  if (!text) {
+    return true;
+  }
+
+  if (/^[\s\.,!?-]+$/.test(text)) {
+    return true;
+  }
+
+  const wordCount = text.split(' ').filter(Boolean).length;
+  if (wordCount <= 1 && text.length <= 2) {
+    return true;
+  }
+
+  const noSpeechProb = Number(result?.noSpeechProb);
+  const avgLogprob = Number(result?.avgLogprob);
+
+  if (Number.isFinite(noSpeechProb) && noSpeechProb > 0.7) {
+    return true;
+  }
+
+  if (Number.isFinite(avgLogprob) && avgLogprob < -1.0 && wordCount <= 4) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
- * Route intent using Groq API
- * @param {string} transcript - User's speech transcript
- * @param {string} systemPrompt - System prompt for intent routing
- * @returns {Promise<Object>} Intent routing result: {intent, params, reasoning}
+ * Transcribe audio using the configured provider.
+ * @param {Buffer} audioBuffer - WAV-formatted audio buffer
+ * @param {Object} options - Transcription options
+ * @returns {Promise<string>} Transcribed text
  */
-export async function routeIntentWithGroq(transcript, systemPrompt) {
-  const groqApiKey = process.env.GROQ_API_KEY;
-  if (!groqApiKey) {
-    throw new Error('GROQ_API_KEY not set in environment');
+export async function transcribeAudio(audioBuffer, options = {}) {
+  const provider = (options.provider || process.env.STT_PROVIDER || 'elevenlabs').toLowerCase();
+  const model = options.sttModel || process.env.STT_MODEL || 'whisper-large-v3-turbo';
+
+  if (provider === 'whisper' || provider === 'local-whisper') {
+    return { text: await transcribeWithWhisper(audioBuffer, model), source: 'whisper' };
   }
 
-  logger.info('Sending to Groq for intent routing...');
-
-  try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${groqApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'mixtral-8x7b-32768',
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: transcript,
-          },
-        ],
-        temperature: 0.3,
-        max_tokens: 500,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Groq API error: ${error.error?.message || response.statusText}`);
-    }
-
-    const result = await response.json();
-    const content = result.choices[0]?.message?.content || '';
-
-    logger.info(`Groq response: ${content}`);
-
-    // Parse JSON from response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Groq response did not contain valid JSON');
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    return {
-      intent: parsed.intent || 'DISPLAY_MESSAGE',
-      params: parsed.params || {},
-      reasoning: parsed.reasoning,
-    };
-  } catch (err) {
-    logger.error('Groq routing error:', err.message);
-    throw err;
+  if (provider === 'elevenlabs' || provider === 'scribe') {
+    const elevenLabsModel = options.elevenLabsSttModel
+      || process.env.ELEVENLABS_STT_MODEL
+      || (options.sttModel && !/^whisper/i.test(options.sttModel) ? options.sttModel : null)
+      || 'scribe_v2';
+    return transcribeWithElevenLabs(audioBuffer, elevenLabsModel);
   }
+
+  logger.warn(`Unknown STT provider "${provider}", falling back to local Whisper.`);
+  return { text: await transcribeWithWhisper(audioBuffer, process.env.WHISPER_MODEL || 'tiny.en'), source: 'whisper' };
+}
+
+/**
+ * Determine whether a transcript should be ignored for conversational voice turns.
+ * @param {Object} result - Transcript result
+ * @returns {boolean}
+ */
+export function transcriptIsUsable(result) {
+  return !shouldIgnoreTranscript(result);
 }
 
 /**
@@ -221,7 +324,7 @@ export async function synthesizeWithElevenLabs(text, voiceId) {
   logger.info(`Synthesizing with ElevenLabs (voice: ${voiceId})...`);
 
   try {
-    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?optimize_streaming_latency=4&output_format=mp3_44100_128`, {
       method: 'POST',
       headers: {
         'xi-api-key': apiKey,
@@ -229,7 +332,7 @@ export async function synthesizeWithElevenLabs(text, voiceId) {
       },
       body: JSON.stringify({
         text,
-        model_id: 'eleven_monolingual_v1',
+        model_id: process.env.ELEVENLABS_MODEL_ID || 'eleven_monolingual_v1',
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.75,
@@ -249,6 +352,112 @@ export async function synthesizeWithElevenLabs(text, voiceId) {
     logger.error('TTS synthesis error:', err.message);
     throw err;
   }
+}
+
+/**
+ * Stream ElevenLabs audio directly to the speaker for lower latency.
+ * @param {string} text - Text to synthesize
+ * @param {string} voiceId - ElevenLabs voice ID
+ * @param {Object} options - Options
+ * @returns {Promise<Buffer|void>} Audio buffer if play is false, otherwise void
+ */
+export async function speakWithElevenLabs(text, voiceId, options = {}) {
+  const { play = true } = options;
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    throw new Error('ELEVENLABS_API_KEY not set in environment');
+  }
+
+  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?optimize_streaming_latency=4&output_format=mp3_44100_128`, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text,
+      model_id: process.env.ELEVENLABS_MODEL_ID || 'eleven_monolingual_v1',
+      voice_settings: {
+        stability: 0.5,
+        similarity_boost: 0.75,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`ElevenLabs API error: ${response.status} ${error}`);
+  }
+
+  if (!play) {
+    return Buffer.from(await response.arrayBuffer());
+  }
+
+  return new Promise((resolve, reject) => {
+    try {
+      logger.info('Playing streaming audio...');
+
+      const ffmpeg = spawn('ffmpeg', [
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-i', 'pipe:0',
+        '-f', 's16le',
+        '-acodec', 'pcm_s16le',
+        '-ar', '16000',
+        '-ac', '1',
+        'pipe:1',
+      ]);
+
+      const speaker = new Speaker({
+        channels: 1,
+        bitDepth: 16,
+        sampleRate: 16000,
+      });
+
+      const audioStream = response.body;
+      if (!audioStream) {
+        reject(new Error('ElevenLabs response body missing'));
+        return;
+      }
+
+      let settled = false;
+      const settle = (err) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve();
+      };
+
+      audioStream.on('error', (err) => {
+        logger.error('ElevenLabs stream error:', err.message);
+        settle(err);
+      });
+
+      audioStream.pipe(ffmpeg.stdin);
+      ffmpeg.stdout.pipe(speaker);
+
+      ffmpeg.on('error', (err) => {
+        logger.error('ffmpeg error:', err.message);
+        settle(err);
+      });
+
+      speaker.on('error', (err) => {
+        logger.error('Speaker error:', err.message);
+        settle(err);
+      });
+
+      speaker.on('finish', () => settle());
+      speaker.on('close', () => settle());
+    } catch (err) {
+      logger.error('Streaming playback setup error:', err.message);
+      reject(err);
+    }
+  });
 }
 
 /**
@@ -300,115 +509,4 @@ export async function playAudio(audioBuffer) {
       reject(err);
     }
   });
-}
-
-/**
- * Full pipeline: record → transcribe → route intent → synthesize → play
- * @param {Object} options - Configuration options
- * @returns {Promise<Object>} Result with transcript, intent, params, and speech
- */
-export async function runFullPipeline(options = {}) {
-  const {
-    durationMs = 10000,
-    whisperModel = 'base',
-    groqSystemPrompt,
-    voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM',
-    play = true,
-  } = options;
-
-  try {
-    // Step 1: Record audio
-    logger.info('\n=== RECORDING ===');
-    const pcmBuffer = await recordAudio(durationMs);
-
-    // Step 2: Convert to WAV
-    logger.info('Converting to WAV...');
-    const wavBuffer = await pcmToWav(pcmBuffer);
-
-    // Step 3: Transcribe with Whisper
-    logger.info('\n=== TRANSCRIPTION ===');
-    const transcript = await transcribeWithWhisper(wavBuffer, whisperModel);
-
-    // Step 4: Route intent with Groq
-    logger.info('\n=== INTENT ROUTING ===');
-    const intentResult = await routeIntentWithGroq(transcript, groqSystemPrompt);
-
-    logger.info(`Intent: ${intentResult.intent}`);
-    logger.info(`Params: ${JSON.stringify(intentResult.params)}`);
-
-    // For now, use the intent as-is (no mirror-server integration yet)
-    const speech = intentResult.speech || `Handling ${intentResult.intent}`;
-
-    // Step 5: Synthesize with ElevenLabs
-    logger.info('\n=== TEXT-TO-SPEECH ===');
-    const audioBuffer = await synthesizeWithElevenLabs(speech, voiceId);
-
-    // Step 6: Play audio
-    if (play) {
-      logger.info('\n=== PLAYBACK ===');
-      await playAudio(audioBuffer);
-    }
-
-    return {
-      success: true,
-      transcript,
-      intent: intentResult.intent,
-      params: intentResult.params,
-      speech,
-    };
-  } catch (err) {
-    logger.error(`Pipeline error: ${err.message}`);
-    return {
-      success: false,
-      error: err.message,
-    };
-  }
-}
-
-/**
- * Route text command (skip Whisper, useful for testing)
- * @param {string} command - Text command
- * @param {Object} options - Configuration options
- * @returns {Promise<Object>} Result with intent, params, and speech
- */
-export async function routeTextCommand(command, options = {}) {
-  const { groqSystemPrompt, voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM', play = true } = options;
-
-  try {
-    logger.info('\n=== TEXT ROUTING ===');
-    logger.info(`Input: "${command}"`);
-
-    // Route intent with Groq
-    logger.info('\n=== INTENT ROUTING ===');
-    const intentResult = await routeIntentWithGroq(command, groqSystemPrompt);
-
-    logger.info(`Intent: ${intentResult.intent}`);
-    logger.info(`Params: ${JSON.stringify(intentResult.params)}`);
-
-    const speech = intentResult.speech || `Handling ${intentResult.intent}`;
-
-    // Synthesize with ElevenLabs
-    logger.info('\n=== TEXT-TO-SPEECH ===');
-    const audioBuffer = await synthesizeWithElevenLabs(speech, voiceId);
-
-    // Play audio
-    if (play) {
-      logger.info('\n=== PLAYBACK ===');
-      await playAudio(audioBuffer);
-    }
-
-    return {
-      success: true,
-      command,
-      intent: intentResult.intent,
-      params: intentResult.params,
-      speech,
-    };
-  } catch (err) {
-    logger.error(`Text routing error: ${err.message}`);
-    return {
-      success: false,
-      error: err.message,
-    };
-  }
 }

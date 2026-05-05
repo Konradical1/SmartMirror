@@ -337,16 +337,16 @@ Start the React UI and mirror OS:
 npm run integrations
 ```
 
-Send a test command:
+Test Jarvis with text:
 
 ```bash
-npm --prefix mirror-server run test:command
+npm --prefix mirror-server run test:jarvis -- --text "what's the weather"
 ```
 
-Or test another intent:
+Or run continuous voice mode:
 
 ```bash
-npm --prefix mirror-server run test:command -- SHOW_CALENDAR "Testing calendar."
+npm --prefix mirror-server run test:jarvis -- --voice
 ```
 
 Expected result:

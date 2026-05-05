@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { Brain, Mic, Radio, Volume2, Waves } from 'lucide-react';
 import { useMemo } from 'react';
 import { useMirrorStore } from '../store/useMirrorStore.js';
 
@@ -55,15 +56,96 @@ function ListeningIndicator() {
   );
 }
 
+const voiceUi = {
+  idle: {
+    label: 'Standby',
+    Icon: Radio,
+    tone: 'neutral',
+  },
+  wake_detected: {
+    label: 'Wake heard',
+    Icon: Waves,
+    tone: 'active',
+  },
+  listening: {
+    label: 'Listening',
+    Icon: Mic,
+    tone: 'active',
+  },
+  thinking: {
+    label: 'Thinking',
+    Icon: Brain,
+    tone: 'thinking',
+  },
+  speaking: {
+    label: 'Speaking',
+    Icon: Volume2,
+    tone: 'speaking',
+  },
+  error: {
+    label: 'Voice error',
+    Icon: Radio,
+    tone: 'error',
+  },
+};
+
+function VoicePulse({ tone }) {
+  const bars = tone === 'thinking' ? 3 : 4;
+  return (
+    <div className="flex h-6 items-end gap-1">
+      {Array.from({ length: bars }).map((_, index) => (
+        <motion.span
+          key={index}
+          className="block w-[3px] rounded-full bg-current"
+          animate={{ height: tone === 'thinking' ? [6, 18, 6] : [8, 24, 8], opacity: [0.4, 1, 0.4] }}
+          transition={{ delay: index * 0.09, duration: tone === 'thinking' ? 1.05 : 0.78, repeat: Infinity, ease: 'easeInOut' }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function VoiceStatus({ status, text }) {
+  const config = voiceUi[status] || voiceUi.idle;
+  const Icon = config.Icon;
+  const isQuiet = status === 'idle';
+  const displayText = text && status !== 'speaking' ? text : '';
+
+  return (
+    <motion.div
+      className={`voice-status voice-status-${config.tone}`}
+      initial={{ opacity: 0, y: 18, scale: 0.98 }}
+      animate={{ opacity: isQuiet ? 0.62 : 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 18, scale: 0.98 }}
+      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <div className="voice-status-icon">
+        <Icon size={18} strokeWidth={1.8} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="voice-status-label">{config.label}</div>
+        {displayText && <div className="voice-status-text">{displayText}</div>}
+      </div>
+      {!isQuiet && <VoicePulse tone={config.tone} />}
+    </motion.div>
+  );
+}
+
 export default function OverlayLayer() {
   const overlay = useMirrorStore((state) => state.overlay);
   const isListening = useMirrorStore((state) => state.isListening);
   const isSpeaking = useMirrorStore((state) => state.isSpeaking);
+  const voiceStatus = useMirrorStore((state) => state.voiceStatus);
 
   return (
-    <AnimatePresence>
-      {overlay && <AIOverlay key={overlay.id} text={overlay.text} />}
-      {isListening && !isSpeaking && <ListeningIndicator key="listening" />}
-    </AnimatePresence>
+    <>
+      <AnimatePresence>
+        {overlay && <AIOverlay key={overlay.id} text={overlay.text} />}
+        {isListening && !isSpeaking && <ListeningIndicator key="listening" />}
+      </AnimatePresence>
+      <AnimatePresence mode="wait">
+        <VoiceStatus key={voiceStatus.status} status={voiceStatus.status} text={voiceStatus.text} />
+      </AnimatePresence>
+    </>
   );
 }

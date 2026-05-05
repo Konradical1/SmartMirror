@@ -5,25 +5,26 @@ const longitude = process.env.WEATHER_LONGITUDE || '-84.3505';
 const timezone = process.env.WEATHER_TIMEZONE || 'America/New_York';
 const location = process.env.WEATHER_LOCATION || 'Anderson Township, OH';
 
-export async function getWeather() {
-  const params = new URLSearchParams({
-    latitude,
-    longitude,
+export async function getWeather(params = {}) {
+  const target = await resolveWeatherTarget(params);
+  const query = new URLSearchParams({
+    latitude: target.latitude,
+    longitude: target.longitude,
     current: 'temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code',
     daily: 'weather_code,temperature_2m_max,temperature_2m_min',
     temperature_unit: 'fahrenheit',
     wind_speed_unit: 'mph',
-    timezone,
+    timezone: target.timezone,
     forecast_days: '3',
   });
 
-  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${query}`);
   if (!response.ok) throw new Error(`Weather failed: ${response.status} ${await response.text()}`);
 
   const data = await response.json();
 
   return {
-    location,
+    location: target.location,
     temperature: Math.round(data.current?.temperature_2m ?? 0),
     feelsLike: Math.round(data.current?.apparent_temperature ?? data.current?.temperature_2m ?? 0),
     condition: weatherLabel(data.current?.weather_code),
@@ -37,6 +38,64 @@ export async function getWeather() {
     })),
     hourly: [],
   };
+}
+
+async function resolveWeatherTarget(params = {}) {
+  const requested = String(params.location || params.place || params.city || params.query || '').trim();
+  if (!requested || isHomeLocation(requested)) return defaultWeatherTarget();
+
+  const match = await geocodeLocation(requested)
+    || await geocodeLocation(`${requested}, Ohio`)
+    || await geocodeLocation(`${requested}, United States`);
+
+  if (!match) throw new Error(`Could not find weather for ${requested}.`);
+
+  const parts = [match.name, match.admin1, match.country_code].filter(Boolean);
+  return {
+    latitude: String(match.latitude),
+    longitude: String(match.longitude),
+    timezone: match.timezone || timezone,
+    location: parts.join(', '),
+  };
+}
+
+function defaultWeatherTarget() {
+  return {
+    latitude,
+    longitude,
+    timezone,
+    location,
+  };
+}
+
+function isHomeLocation(value) {
+  const normalized = String(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return [
+    'here',
+    'home',
+    'my location',
+    'current location',
+    'anderson',
+    'anderson ohio',
+    'anderson oh',
+    'anderson township',
+    'anderson township ohio',
+    'anderson township oh',
+  ].includes(normalized);
+}
+
+async function geocodeLocation(name) {
+  const search = new URLSearchParams({
+    name,
+    count: '1',
+    language: 'en',
+    format: 'json',
+  });
+
+  const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${search}`);
+  if (!response.ok) throw new Error(`Weather location lookup failed: ${response.status} ${await response.text()}`);
+  const data = await response.json();
+  return data.results?.[0] || null;
 }
 
 function weatherLabel(code) {
