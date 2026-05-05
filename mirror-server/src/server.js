@@ -373,6 +373,11 @@ async function startNgrok(addr, attempt = 0) {
   const MAX_ATTEMPTS = 10;
   const RETRY_DELAY = 20000;
 
+  if (String(process.env.NGROK_ENABLED || '').toLowerCase() === 'false') {
+    logger.info('Ngrok disabled by NGROK_ENABLED=false.');
+    return;
+  }
+
   if (!process.env.NGROK_AUTHTOKEN) {
     logger.info('Ngrok disabled. Set NGROK_AUTHTOKEN when you are ready to expose /mirror-command to ElevenLabs.');
     return;
