@@ -4,7 +4,10 @@ import json
 import os
 import struct
 import sys
+import warnings
 from pathlib import Path
+
+warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL.*")
 
 import numpy as np
 import openwakeword

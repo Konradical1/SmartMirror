@@ -3,4 +3,5 @@ dist
 .env
 .DS_Store
 mirror-server/.venv-voice/
+mirror-server/models/
 mirror-server/temp/

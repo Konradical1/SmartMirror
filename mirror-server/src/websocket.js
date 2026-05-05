@@ -50,13 +50,14 @@ function sendContextSnapshot(socket) {
   }
 }
 
-export function broadcastAction(intent, data = {}, speech = '') {
+export function broadcastAction(intent, data = {}, speech = '', meta = {}) {
   broadcast({
     type: 'ACTION',
     payload: {
       intent,
       data,
       speech,
+      ...meta,
     },
   });
 }
@@ -68,21 +69,23 @@ export function broadcastData(payload) {
   });
 }
 
-export function broadcastOverlay(speech) {
+export function broadcastOverlay(speech, meta = {}) {
   broadcast({
     type: 'OVERLAY',
     payload: {
       speech,
+      ...meta,
     },
   });
 }
 
-export function broadcastVoiceStatus(status, text = '') {
+export function broadcastVoiceStatus(status, text = '', meta = {}) {
   broadcast({
     type: 'VOICE_STATUS',
     payload: {
       status,
       text,
+      ...meta,
     },
   });
 }

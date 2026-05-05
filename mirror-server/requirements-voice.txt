@@ -1,3 +1,5 @@
 numpy
 openwakeword
+faster-whisper
+vosk
 websockets

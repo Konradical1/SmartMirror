@@ -45,6 +45,19 @@ export function llmConfig(provider = activeLlmProvider()) {
     };
   }
 
+  if (provider === 'gemini') {
+    return {
+      name: 'Gemini',
+      provider,
+      apiKey: process.env.GEMINI_API_KEY,
+      apiKeyName: 'GEMINI_API_KEY',
+      url: process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com',
+      model: process.env.GEMINI_MODEL || process.env.LLM_MODEL || 'gemini-1.5-flash-latest',
+      maxTokens: Number(process.env.GEMINI_MAX_TOKENS || process.env.LLM_MAX_TOKENS || 300),
+      temperature: Number(process.env.GEMINI_TEMPERATURE || process.env.LLM_TEMPERATURE || 0.3),
+    };
+  }
+
   if (provider === 'cerebras') {
     return {
       name: 'Cerebras',
@@ -82,6 +95,18 @@ export async function llmText({
   const config = llmConfig(provider);
   if (!config.apiKey) {
     throw new Error(`${config.apiKeyName} not set.`);
+  }
+
+  if (config.provider === 'gemini') {
+    return geminiText({
+      config,
+      messages,
+      model,
+      maxTokens,
+      temperature,
+      topP,
+      purpose,
+    });
   }
 
   const body = {
@@ -141,6 +166,80 @@ function headersFor(config) {
   }
 
   return headers;
+}
+
+async function geminiText({
+  config,
+  messages,
+  model,
+  maxTokens,
+  temperature,
+  topP,
+  purpose,
+} = {}) {
+  const { systemInstruction, contents } = toGeminiContents(messages || []);
+
+  const body = {
+    contents,
+    generationConfig: {
+      temperature: finiteOr(temperature, config.temperature),
+      topP: finiteOr(topP, Number(process.env.LLM_TOP_P || 1)),
+      maxOutputTokens: finiteOr(maxTokens, config.maxTokens),
+    },
+  };
+
+  if (systemInstruction) {
+    body.systemInstruction = systemInstruction;
+  }
+
+  const urlBase = config.url.replace(/\/$/, '');
+  const chosenModel = model || config.model;
+  const url = `${urlBase}/v1beta/models/${encodeURIComponent(chosenModel)}:generateContent?key=${encodeURIComponent(config.apiKey)}`;
+
+  logger.info(`LLM ${purpose}: ${config.name} (${chosenModel})`);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`${config.name} LLM failed: ${response.status} ${text || response.statusText}`);
+  }
+
+  const result = await response.json();
+  const content = result?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('') || '';
+  if (!content) {
+    throw new Error(`${config.name} LLM returned no content.`);
+  }
+  return cleanModelText(content);
+}
+
+function toGeminiContents(messages) {
+  const contents = [];
+  const systemParts = [];
+
+  for (const message of messages) {
+    if (!message || typeof message.content !== 'string') continue;
+    const role = message.role === 'assistant' ? 'model' : message.role === 'system' ? 'system' : 'user';
+
+    if (role === 'system') {
+      systemParts.push({ text: message.content });
+      continue;
+    }
+
+    contents.push({
+      role,
+      parts: [{ text: message.content }],
+    });
+  }
+
+  const systemInstruction = systemParts.length ? { parts: systemParts } : null;
+  return { systemInstruction, contents };
 }
 
 function finiteOr(value, defaultValue) {

@@ -6,8 +6,13 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleIntent } from './intentRouter.js';
-import { buildJarvisContext } from './jarvis/context.js';
-import { composeJarvisResponse, runJarvisTurn } from './jarvis/pipeline.js';
+import { buildJarvisContext, buildNowContext } from './jarvis/context.js';
+import {
+  composeJarvisResponse,
+  jarvisFailureSpeech,
+  publicJarvisErrorMessage,
+  runJarvisTurn,
+} from './jarvis/pipeline.js';
 import { attachWebSocket, broadcastAction, broadcastOverlay, broadcastVoiceStatus } from './websocket.js';
 import { refreshSpotify, startSpotifyPolling } from './handlers/spotify.js';
 import { refreshCalendar } from './handlers/calendar.js';
@@ -44,7 +49,12 @@ app.post('/jarvis-command', async (request, response) => {
 
     const input = String(request.body?.input || request.body?.text || request.body?.transcript || '').trim();
     if (!input) {
-      response.status(400).json({ ok: false, speech: 'Jarvis response failed.' });
+      const message = 'No input text received.';
+      response.status(400).json({
+        ok: false,
+        speech: `Jarvis response failed: ${message}`,
+        error: message,
+      });
       return;
     }
 
@@ -57,15 +67,17 @@ app.post('/jarvis-command', async (request, response) => {
       params: result.params,
       data: result.data ?? null,
       ui: result.ui ?? null,
+      displayMs: result.displayMs,
+      speechDisplayMs: result.speechDisplayMs,
     });
   } catch (error) {
     logger.error(error.message);
-    const failureSpeech = 'Jarvis response failed.';
+    const failureSpeech = error.publicSpeech || jarvisFailureSpeech(error);
     broadcastOverlay(failureSpeech);
     response.status(error.status || 500).json({
       ok: false,
       speech: failureSpeech,
-      error: error.message,
+      error: publicJarvisErrorMessage(error),
     });
   }
 });
@@ -89,14 +101,15 @@ app.post('/mirror-command', async (request, response) => {
       history: Array.isArray(request.body?.history) ? request.body.history : [],
     });
     broadcastOverlay(responseSpeech);
-    response.json({ ok: true, speech: responseSpeech, data: result.data ?? null });
+    response.json({ ok: true, speech: responseSpeech, data: result.data ?? null, ui: result.ui ?? null });
   } catch (error) {
     logger.error(error.message);
-    const failureSpeech = error.publicSpeech || 'Jarvis response failed.';
+    const failureSpeech = error.publicSpeech || jarvisFailureSpeech(error);
     broadcastOverlay(failureSpeech);
     response.status(error.status || 500).json({
       ok: false,
       speech: failureSpeech,
+      error: publicJarvisErrorMessage(error),
     });
   }
 });
@@ -158,15 +171,24 @@ app.post('/voice-status', (request, response) => {
 
   const status = typeof request.body?.status === 'string' ? request.body.status.trim().toLowerCase() : '';
   const text = typeof request.body?.text === 'string' ? request.body.text : '';
-  const allowedStatuses = new Set(['idle', 'wake_detected', 'listening', 'thinking', 'speaking', 'error']);
+  const phase = typeof request.body?.phase === 'string' ? request.body.phase.trim().toLowerCase() : '';
+  const source = typeof request.body?.source === 'string' ? request.body.source.trim().toLowerCase() : '';
+  const final = Boolean(request.body?.final);
+  const displayMs = Number(request.body?.displayMs);
+  const allowedStatuses = new Set(['idle', 'wake_detected', 'listening', 'thinking', 'speaking', 'done', 'error']);
 
   if (!allowedStatuses.has(status)) {
     response.status(400).json({ ok: false, error: 'Invalid voice status.' });
     return;
   }
 
-  logger.info(`voice ${status}${text ? ` ${text}` : ''}`);
-  broadcastVoiceStatus(status, text);
+  logger.info(`voice ${status}${phase ? `/${phase}` : ''}${text ? ` ${text}` : ''}`);
+  broadcastVoiceStatus(status, text, {
+    phase,
+    source,
+    final,
+    ...(Number.isFinite(displayMs) && displayMs > 0 ? { displayMs } : {}),
+  });
   response.json({ ok: true });
 });
 
@@ -261,6 +283,10 @@ async function handleDataIntent(intent, params = {}) {
       broadcastAction('SHOW_WEATHER', {}, '');
       return { data: { weather }, ui: { scene: 'weather' } };
     }
+    case 'SHOW_TIME': {
+      setLastIntent('SHOW_TIME');
+      return { data: { time: buildNowContext() }, ui: { scene: state.currentScene } };
+    }
     case 'SHOW_CALENDAR': {
       const calendar = await refreshCalendar(params);
       focusScene('calendar', 'SHOW_CALENDAR');
@@ -295,6 +321,10 @@ async function handleDataIntent(intent, params = {}) {
     case 'DISPLAY_MESSAGE': {
       setLastIntent('DISPLAY_MESSAGE');
       return { data: { message: params.message || params.text || '' }, ui: { scene: state.currentScene } };
+    }
+    case 'END_CONVERSATION': {
+      setLastIntent('END_CONVERSATION');
+      return { data: { ended: true }, ui: { scene: state.currentScene } };
     }
     case 'IDLE': {
       focusScene('idle', 'IDLE');
